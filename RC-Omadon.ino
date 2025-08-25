@@ -54,7 +54,7 @@
 */
 
 // Debug flag, set to 0 in production. Adjust baud rate if required
-const int DEBUG = 0;
+const int DEBUG = 1;
 const int BaudRate = 460800;
 
 // Firmware version
@@ -96,23 +96,6 @@ char profile_change_seq[PROFILE_SEQ_LENGTH] = { '1', '2', '3', '4' }; // Press 1
 char profile_key_buffer[PROFILE_SEQ_LENGTH]; 
 int profile_buf_index = 0;
 bool profile_select_mode = false;
-
-// We want to have separate BT device info for each profile just in case some application require specific name like DMD2
-struct BTDeviceInfo {
-  const char* name;
-  const char* manufacturer;
-  int batteryLevel;
-};
-BTDeviceInfo bt_device_profiles[8] = {
-  { "RCntrl V2 P.1", "S.R.I. Omadon", 55 }, // Profil 1
-  { "RCntrl V2 P.2", "S.R.I. Omadon", 55 }, // Profil 2
-  { "RCntrl V2 P.3", "S.R.I. Omadon", 55 }, // Profil 3
-  { "BarButtons",    "S.R.I. Omadon", 55 }, // Profil 4
-  { "RCntrl V2 P.5", "S.R.I. Omadon", 55 }, // Profil 5
-  { "RCntrl V2 P.6", "S.R.I. Omadon", 55 }, // Profil 6
-  { "RCntrl V2 P.7", "S.R.I. Omadon", 55 }, // Profil 7
-  { "DMD2 CTL 8K",   "S.R.I. Omadon", 55 }  // Profil 8
-};
 
 // Device name should match the current active profile "RCntrl V2 P.1"
 BleKeyboard bleKeyboard(bt_device_profiles[0].name, bt_device_profiles[0].manufacturer, bt_device_profiles[0].batteryLevel);
@@ -291,12 +274,15 @@ void flash_led(int repeat, int on_time, int off_time) {
   }
 }
 
+// Helper function: returns 0, 1, or 2 depending on the mapping
+int get_key_mode(int key_index) {
+  return instant_keys[active_profile][key_index];
+}
+
 // Helper function to determine if a key is supposed to be instant, or we should send a key on "key up"
 int is_key_instant(char key_pressed) {
-  for ( int i = 0; i < sizeof (instant_keys[active_profile]); i++) {
-    if ( instant_keys[active_profile][i] == key_pressed) {
+  if (get_key_mode(key_pressed - '1') == 1) {
       return true;
-    }
   }
   return false;
 }

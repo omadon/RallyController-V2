@@ -132,20 +132,38 @@ const uint8_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 8 long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
-// These keys will be sent instantly on initial press of the button at "key down"
-// Other keys will be sent delayed on "key up"
-// This is to be used for repeating keys or keys that are only pressed.
-// If some keys in the profile should send on "key up" just removed it from the list (replace it with existing key)
+// Status mapping table for keys in each profile
+// 0 = not instant (send on release)
+// 1 = instant (send on press)
+// 2 = direct (special handling if needed)
 char instant_keys[NUM_PROFILES][NUM_KEYS] = {
-  {'1', '2', '3', '4', '5', '6', '7', '8'}, // profile 1
-  {'1', '2', '3', '4', '5', '6', '7', '8'}, // profile 2
-  {'0', '0', '3', '4', '5', '6', '7', '8'}, // profile 3 keys 1 and 2 in profile 2 are non-instant keys
-  {'1', '2', '3', '4', '5', '6', '7', '8'}, // profile 4
-  {'1', '2', '3', '4', '5', '6', '7', '8'}, // profile 5
-  {'1', '2', '0', '4', '5', '6', '7', '8'}, // profile 6 key 3 is non-instant key
-  {'0', '0', '0', '0', '0', '0', '0', '0'}, // profile 7 all keys are non-instant
-  {'1', '2', '3', '4', '5', '6', '7', '8'}  // profile 8
+  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 1 (all instant)
+  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 2 (all instant)
+  {0, 0, 1, 1, 1, 1, 1, 1}, // profile 3 (keys 1 and 2 non-instant)
+  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 4
+  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 5
+  {1, 1, 0, 1, 1, 1, 1, 1}, // profile 6 (key 3 non-instant)
+  {0, 0, 0, 0, 0, 0, 0, 0}, // profile 7 (all non-instant)
+  {1, 1, 1, 1, 1, 1, 1, 1}  // profile 8
 };
+
+// We want to have separate BT device info for each profile just in case some application require specific name like DMD2
+struct BTDeviceInfo {
+  const char* name;
+  const char* manufacturer;
+  int batteryLevel;
+};
+BTDeviceInfo bt_device_profiles[8] = {
+  { "RCntrl V2 P.1", "S.R.I. Omadon", 55 }, // Profil 1
+  { "RCntrl V2 P.2", "S.R.I. Omadon", 55 }, // Profil 2
+  { "RCntrl V2 P.3", "S.R.I. Omadon", 55 }, // Profil 3
+  { "BarButtons",    "S.R.I. Omadon", 55 }, // Profil 4
+  { "RCntrl V2 P.5", "S.R.I. Omadon", 55 }, // Profil 5
+  { "RCntrl V2 P.6", "S.R.I. Omadon", 55 }, // Profil 6
+  { "RCntrl V2 P.7", "S.R.I. Omadon", 55 }, // Profil 7
+  { "DMD2 CTL 8K",   "S.R.I. Omadon", 55 }  // Profil 8
+};
+
 
 // We want real names in the debug output
 struct MediaKeyName {

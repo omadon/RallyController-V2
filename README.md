@@ -92,7 +92,8 @@ Each button can be mapped to:
 3. **Instant keys (timing control)**  
    → determines *when* a key event is sent:  
    - **Instant (1)** → key is sent immediately on button down.  
-   - **Non-instant (0)** → key is sent on button release.  
+   - **Non-instant (0)** → key is sent on button release.
+   - **Direct (2)** → bleKeyboard.press.
    → defined in `instant_keys`.
 
 ---
@@ -153,7 +154,7 @@ Code changes:
 { 0, 0, 0, 0, 0, 0, 0, 0 },
 
 // instant_keys (Profile 4)
-{'1', '2', '3', '4', '5', '6', '7', '8'},
+{'1', '1', '1', '1', '1', '1', '1', '1'},
 
 // BTDeviceInfo (Profile 4)
 { "BarButtons",    "S.R.I. Omadon", 55 }, // Profil 4
@@ -182,7 +183,7 @@ Code changes:
 { KEY_MEDIA_PLAY_PAUSE, KEY_MEDIA_STOP, 0, 0, 0, 0, 0, 0 },
 
 // instant_keys (Profile 3) buttons 1 and 2 are removed from instant keys
-{'0', '0', '3', '4', '5', '6', '7', '8'},
+{'0', '0', '1', '1', '1', '1', '1', '1'},
 ```
 
 Explanation:  
@@ -220,3 +221,4 @@ Explanation:
 This work is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International License**.  
 To view a copy of this license, visit [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/)  
 or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
+
