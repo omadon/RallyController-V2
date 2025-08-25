@@ -326,6 +326,22 @@ int resolve_profile_from_key(char key, bool longPress) {
   return profile;
 }
 
+void change_profile (char key, bool longPress) {
+  int profile = resolve_profile_from_key(key, longPress);
+  if (profile >= 0) {
+    set_profile(profile);
+    profile_select_mode = false;
+    app_status = MAIN_MENU;
+    if (DEBUG) {
+      if (longPress) {
+        Serial.print(F(">>> Long press profile selected: ")); 
+      } else {
+        Serial.print(F(">>> Short press profile selected: "));
+      }
+      Serial.println(profile + 1);
+    }
+  }
+} 
 // Change BLE advertisment name, IOS users will see update after BT restart
 void updateBleName(const char* newName) {
     // Change BLE advertisment
@@ -380,13 +396,7 @@ void keypad_handler(KeypadEvent key) {
       
       // Check if we are in the profile selected mode
       if (profile_select_mode) {
-        int profile = resolve_profile_from_key(key, true);
-        if (profile >= 0) {
-          set_profile(profile);
-          profile_select_mode = false;
-          app_status = MAIN_MENU;
-          if (DEBUG) {Serial.print(F(">>> Long press profile selected: ")); Serial.println(profile + 1);}
-        }
+        change_profile(key, true);
       } 
       else {
         if (has_long_press_mapping(key)) {
@@ -410,13 +420,7 @@ void keypad_handler(KeypadEvent key) {
 
       // Check if we are in the profile selected mode
       if (profile_select_mode) {
-          int profile = resolve_profile_from_key(key, false);
-          if (profile >= 0) {
-            set_profile(profile);
-            profile_select_mode = false;
-            app_status = MAIN_MENU;
-            if (DEBUG) { Serial.print(F(">>> Short press profile selected: ")); Serial.println(profile + 1);}
-          }
+        change_profile(key, false);
       } 
       else {
       // Store prevoius pressed buttons so we can change the profile if proper key sequence is typed
