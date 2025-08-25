@@ -129,24 +129,59 @@ Example:
 
 ---
 
-## 🛠 Example: Custom media profile
+## 🛠 Example: Custom DMD2 profile
 
-Let’s configure **Profile 2** like this:
-- Button 1 → short press = Play/Pause, long press = Stop  
-- Button 2 → short press = Next, long press = Previous  
-
+Let’s configure **Profile 4** like this:
+- Button 1 → short press = F6, long press = F6  
+- Button 2 → short press = F7, long press = F7
+- Button 3 → short press = ENTER, long press = ENTER
+- Button 4 → short press = F5, long press = F5
+- Buttons 5-8 (Controller 2) Up/Left/Right/Down arrows
+  
 Code changes:
 ```cpp
-// profiles_normal (Profile 2 short press)
+// profiles_normal (Profile 4 short press)
+{ KEY_F6, KEY_F7, KEY_RETURN, KEY_F5, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW },
+
+// profiles_normal (Profile 4 long press)
+{ 0, 0, 0, 0, 0, 0, 0, 0 },
+
+// profiles_media (Profile 4 short press)
+{ 0, 0, 0, 0, 0, 0, 0, 0 },
+
+// profiles_media (Profile 4 long press)
+{ 0, 0, 0, 0, 0, 0, 0, 0 },
+
+// instant_keys (Profile 4)
+{'1', '2', '3', '4', '5', '6', '7', '8'},
+
+// BTDeviceInfo (Profile 4)
+{ "BarButtons",    "S.R.I. Omadon", 55 }, // Profil 4
+```
+
+---
+
+## 🛠 Example: Custom media profile
+
+Let’s configure **Profile 3** like this:
+- Button 1 → short press = Next, long press = Play/Pause  
+- Button 2 → short press = Previous, long press = Stop
+- Button 3 → short press = VolumeUP, long press = repeat VolumeUP
+- Button 4 → short press = VolumeDOWN, long press = repeat VolumeDOWN
+- Buttons 5-8 (Controller 2) Up/Left/Right/Down arrows
+  
+Code changes:
+```cpp
+// profiles_normal (Profile 3 short press) zero in normal mapping says look at the media mapping
 { 0, 0, 0, 0, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW },
 
-// profiles_media (Profile 2 short press)
-{ KEY_MEDIA_PLAY_PAUSE, KEY_MEDIA_NEXT_TRACK, 0, 0, 0, 0, 0, 0 },
+// profiles_media (Profile 3 short press)
+{ KEY_MEDIA_NEXT_TRACK, KEY_MEDIA_PREVIOUS_TRACK, KEY_MEDIA_VOLUME_UP, KEY_MEDIA_VOLUME_DOWN, 0, 0, 0, 0 },
 
-// profiles_media (Profile 2 long press)
-{ KEY_MEDIA_STOP, KEY_MEDIA_PREVIOUS_TRACK, 0, 0, 0, 0, 0, 0 },
+// profiles_media (Profile 3 long press)
+{ KEY_MEDIA_PLAY_PAUSE, KEY_MEDIA_STOP, 0, 0, 0, 0, 0, 0 },
 
-// instant_keys (Profile 2)
+// instant_keys (Profile 3) buttons 1 and 2 are removed from instant keys
 {'0', '0', '3', '4', '5', '6', '7', '8'},
 ```
 
