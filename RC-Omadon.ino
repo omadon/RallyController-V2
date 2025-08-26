@@ -145,21 +145,21 @@ int led_state = 0;       // holds the state of the led (0=LOW, 1=HIGH)
 int led_state_time = 0;  // holds the time we've switched to the current led_state
 
 // Routine to send the keystrokes on a short press of the keypad
-void send_short_press(KeypadEvent key, int profile_offset = 0) {
+void send_short_press(KeypadEvent key, int key_action = INSTANT, int profile_offset = 0) {
 
   if (DEBUG) {Serial.print(F("Sending short press key "));Serial.println(key);}
 
   // We're in the main menu
   if (app_status == MAIN_MENU || app_status == KEYMAP_STATUS || app_status == BT_DISCONNECTED) {
     switch (key) {
-      case '1': send_single_key(active_profile + profile_offset, 0); break;
-      case '2': send_single_key(active_profile + profile_offset, 1); break;
-      case '3': send_single_key(active_profile + profile_offset, 2); break;
-      case '4': send_single_key(active_profile + profile_offset, 3); break;
-      case '5': send_single_key(active_profile + profile_offset, 4); break;
-      case '6': send_single_key(active_profile + profile_offset, 5); break;
-      case '7': send_single_key(active_profile + profile_offset, 6); break;
-      case '8': send_single_key(active_profile + profile_offset, 7); break;
+      case '1': send_single_key(active_profile + profile_offset, 0, key_action); break;
+      case '2': send_single_key(active_profile + profile_offset, 1, key_action); break;
+      case '3': send_single_key(active_profile + profile_offset, 2, key_action); break;
+      case '4': send_single_key(active_profile + profile_offset, 3, key_action); break;
+      case '5': send_single_key(active_profile + profile_offset, 4, key_action); break;
+      case '6': send_single_key(active_profile + profile_offset, 5, key_action); break;
+      case '7': send_single_key(active_profile + profile_offset, 6, key_action); break;
+      case '8': send_single_key(active_profile + profile_offset, 7, key_action); break;
     }
   }      
 }
@@ -205,15 +205,25 @@ bool wait_for_key_hold(int key_hold_time) {
 
 }
 // Send single key, first look in the normal profile table than in the media profile table
-void send_single_key(int profile, int keyIndex) {
+void send_single_key(int profile, int keyIndex, int key_action) {
   // Check if we are sending normal or media keys
   if (profiles_normal[profile][keyIndex] != 0) {
-    bleKeyboard.write(profiles_normal[profile][keyIndex]);
-    if (DEBUG) { Serial.print(F("Sending normal key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
+    if (key_action == INSTANT) {
+      bleKeyboard.write(profiles_normal[profile][keyIndex]);
+      if (DEBUG) { Serial.print(F("Sending normal INSTANT key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
+    } else if (key_action == DIRECT) {
+      bleKeyboard.press(profiles_normal[profile][keyIndex]);
+      if (DEBUG) { Serial.print(F("Sending normal DIRECT key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
+    } 
   } 
   else if (profiles_media[profile][keyIndex] != 0) {
-    bleKeyboard.write(profiles_media[profile][keyIndex]);
-    if (DEBUG) { Serial.print(F("Sending media key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
+    if (key_action == INSTANT) {
+      bleKeyboard.write(profiles_media[profile][keyIndex]);
+      if (DEBUG) { Serial.print(F("Sending media INSTANT key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
+    } else if (key_action == DIRECT) {
+      bleKeyboard.press(profiles_media[profile][keyIndex]);
+      if (DEBUG) { Serial.print(F("Sending media DIRECT key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
+    }
   }
   flash_led(1, 150, 0); 
 }
@@ -276,13 +286,33 @@ void flash_led(int repeat, int on_time, int off_time) {
 
 // Helper function: returns 0, 1, or 2 depending on the mapping
 int get_key_mode(int key_index) {
-  return instant_keys[active_profile][key_index];
+  if (DEBUG) { Serial.print(F("Key mode: ")); Serial.println(key_actions[active_profile][key_index]);}
+  return key_actions[active_profile][key_index];
+}
+
+// Helper function to determine if a key is release"
+int is_key_release(char key_pressed) {
+  if (get_key_mode(key_pressed - '1') == 0) {
+    if (DEBUG) { Serial.println("Button type: RELEASE"); }
+    return true;
+  }
+  return false;
 }
 
 // Helper function to determine if a key is supposed to be instant, or we should send a key on "key up"
 int is_key_instant(char key_pressed) {
   if (get_key_mode(key_pressed - '1') == 1) {
-      return true;
+    if (DEBUG) { Serial.println("Button type: INSTANT"); }
+    return true;
+  }
+  return false;
+}
+
+// Helper function to determine if a key is direct"
+int is_key_direct(char key_pressed) {
+  if (get_key_mode(key_pressed - '1') == 2) {
+    if (DEBUG) { Serial.println("Button type: DIRECT"); }
+    return true;
   }
   return false;
 }
@@ -387,7 +417,9 @@ void keypad_handler(KeypadEvent key) {
     case PRESSED: // At the 'key down' event of a button
       if (DEBUG) { Serial.println(F("keypad.getState = PRESSED"));}
       last_keypad_state = keypad.getState();
-      if (is_key_instant(key) && app_status != CONFIG_MENU) { send_short_press(key);}
+      if (DEBUG) { Serial.print(F("+++++ App status: ")); Serial.println(app_status); }
+      if (is_key_instant(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, INSTANT);}
+      else if (is_key_direct(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, DIRECT);}
       break;
 
     case HOLD: // When a button is held beyond the long_press_time value
@@ -400,10 +432,11 @@ void keypad_handler(KeypadEvent key) {
       } 
       else {
         if (has_long_press_mapping(key)) {
-          // Use the long press mapping table that has anf offset equls to NUM_PROFILES
-          send_short_press(key, NUM_PROFILES);
+          // Use the long press mapping table that has an offset equals to NUM_PROFILES
+          send_short_press(key, INSTANT, NUM_PROFILES);
         }
         else {
+          if (DEBUG) { Serial.println(F("+++++ Saljem dugi")); }
           send_long_press(key);
         }
       }
@@ -438,10 +471,11 @@ void keypad_handler(KeypadEvent key) {
         }
       }
 
-      // Non instant key, we are sending a key on "key up"
+      // Release key, we are sending a key on "key up"
       if (last_keypad_state == PRESSED) {
-        if (!(is_key_instant(key) && app_status != CONFIG_MENU)) {
-          send_short_press(key);
+//        if (!(is_key_instant(key) && app_status != CONFIG_MENU)) {
+          if (is_key_release(key) && app_status != CONFIG_MENU) {
+          send_short_press(key, DIRECT);
         }
       }
 

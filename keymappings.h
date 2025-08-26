@@ -105,7 +105,7 @@ const uint8_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 6 short press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 7 short press
-  { 0, 0, 0, 0, 0,  KEY_MEDIA_PREVIOUS_TRACK, KEY_MEDIA_NEXT_TRACK, KEY_MEDIA_PLAY_PAUSE },
+  { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 8 short press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // If there is a mapping for long press, instead of sending repeating key, single key with new mapping is sent
@@ -114,7 +114,7 @@ const uint8_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
     // Profil w long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 3 long press 
-  // if you use long press keys, make sure that you configure those keys as non-instant by modifying "instant_keys" table
+  // if you use long press keys, make sure that you configure those keys as non-instant by modifying "key_actions" table
   // if you leave keys as instant keys, they will first send normal key and than long press key
   // Example for profile2: 
   //    first two buttons are non-instant, meaning key will be sent when you release the button (no repeat of course)
@@ -132,19 +132,20 @@ const uint8_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 8 long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
+
 // Status mapping table for keys in each profile
-// 0 = not instant (send on release)
-// 1 = instant (send on press)
-// 2 = direct (special handling if needed)
-char instant_keys[NUM_PROFILES][NUM_KEYS] = {
-  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 1 (all instant)
-  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 2 (all instant)
-  {0, 0, 1, 1, 1, 1, 1, 1}, // profile 3 (keys 1 and 2 non-instant)
-  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 4
-  {1, 1, 1, 1, 1, 1, 1, 1}, // profile 5
-  {1, 1, 0, 1, 1, 1, 1, 1}, // profile 6 (key 3 non-instant)
-  {0, 0, 0, 0, 0, 0, 0, 0}, // profile 7 (all non-instant)
-  {1, 1, 1, 1, 1, 1, 1, 1}  // profile 8
+#define  RELEASE 0   // fire on key release
+#define  INSTANT 1   // fire immediately on press
+#define  DIRECT  2   // bypass normal handling, send keypress
+int key_actions[NUM_PROFILES][NUM_KEYS] = {
+  {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 1
+  {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 2
+  {RELEASE, RELEASE, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 3
+  {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 4
+  {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 5
+  {INSTANT, INSTANT, RELEASE, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 6
+  {DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT},  // profile 7
+  {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}  // profile 8
 };
 
 // We want to have separate BT device info for each profile just in case some application require specific name like DMD2
