@@ -68,7 +68,7 @@ char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 5 short press
   { KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8 }, // generic profile with Function keys that can be mapped inside application
   // Profil 6 short press
-  { '=', '-', 'N', 'C', KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW }, // Navigation
+  { '+', '-', 'D', 'C', KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW }, // Navigation
   // Profil 7 short press
   { KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8 }, //SpeedoX MyRide
   // Profil 8 short press
@@ -141,11 +141,11 @@ int key_actions[NUM_PROFILES][NUM_KEYS] = {
   {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 1
   {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 2
   {RELEASE, RELEASE, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 3
-  {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 4
+  {DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT}, // profile 4
   {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 5
   {INSTANT, INSTANT, RELEASE, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}, // profile 6
   {DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT},  // profile 7
-  {INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT, INSTANT}  // profile 8
+  {DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT,  DIRECT}  // profile 8
 };
 
 // We want to have separate BT device info for each profile just in case some application require specific name like DMD2

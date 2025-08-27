@@ -1,7 +1,7 @@
 /*
     RCntrl firmware v2 by Omadon
     
-    Version 2.20
+    Version 2.22
 
     Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller 
     
@@ -59,7 +59,7 @@ const int BaudRate = 460800;
 
 // Firmware version
 const int firmware_version_major = 2;
-const int firmware_version_minor = 20;
+const int firmware_version_minor = 22;
 
 #include <Keypad.h>      // Keypad library to handle matrix keypad setup
 #include <BleKeyboard.h> // For ESP32 Bluetooth keyboard HID https://github.com/T-vK/ESP32-BLE-Keyboard
@@ -134,7 +134,8 @@ int app_status = BT_DISCONNECTED;
 int led_delays[4][2] = {  // holds the on/off pattern/times for the different status'es
   { 200,  3000  },    // BT_DISCONNECTED
   { 3000,  100 },     // CONFIG_MENU
-  { 36000000, 100  }, // MAIN_MENU blink every 10h, almost never! Use { 5000, 100  } for normal blinking
+//  { 5000, 100  }, // MAIN_MENU blink every 10h, almost never! Use { 5000, 100  } for normal blinking
+  { 3600000, 100  }, // MAIN_MENU blink every 10h, almost never! Use { 5000, 100  } for normal blinking
   { 5000, 100  }      // KEYMAP_STATUS
 };
 
@@ -286,7 +287,6 @@ void flash_led(int repeat, int on_time, int off_time) {
 
 // Helper function: returns 0, 1, or 2 depending on the mapping
 int get_key_mode(int key_index) {
-  if (DEBUG) { Serial.print(F("Key mode: ")); Serial.println(key_actions[active_profile][key_index]);}
   return key_actions[active_profile][key_index];
 }
 
@@ -430,15 +430,20 @@ void keypad_handler(KeypadEvent key) {
       if (profile_select_mode) {
         change_profile(key, true);
       } 
+      // If we have a direct key, we already sent bleKeyboard.press no need for repeat
+      // Direct keys have no mappings or repeat requirements.
+      else if (is_key_direct(key)) {
+        break;
+      }
+      // Release key with long mapping triggers sending single key
+      else  if (is_key_release(key) && has_long_press_mapping(key)) {
+        // Use the long press mapping table that has an offset equals to NUM_PROFILES
+        if (DEBUG) { Serial.println(F("+++++ Dugi Release")); }         
+        send_short_press(key, INSTANT, NUM_PROFILES);
+      }
       else {
-        if (has_long_press_mapping(key)) {
-          // Use the long press mapping table that has an offset equals to NUM_PROFILES
-          send_short_press(key, INSTANT, NUM_PROFILES);
-        }
-        else {
-          if (DEBUG) { Serial.println(F("+++++ Saljem dugi")); }
-          send_long_press(key);
-        }
+        if (DEBUG) { Serial.println(F("+++++ Dugi...")); }
+        send_long_press(key);
       }
       break;    
 
@@ -475,7 +480,7 @@ void keypad_handler(KeypadEvent key) {
       if (last_keypad_state == PRESSED) {
 //        if (!(is_key_instant(key) && app_status != CONFIG_MENU)) {
           if (is_key_release(key) && app_status != CONFIG_MENU) {
-          send_short_press(key, DIRECT);
+            send_short_press(key, INSTANT);
         }
       }
 
