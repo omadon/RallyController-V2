@@ -1,7 +1,7 @@
 /*
     RCntrl firmware v2 by Omadon
     
-    Version 2.22
+    Version 2.23
 
     Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller 
     
@@ -59,9 +59,9 @@ const int BaudRate = 460800;
 
 // Firmware version
 const int firmware_version_major = 2;
-const int firmware_version_minor = 22;
+const int firmware_version_minor = 23;
 
-#include <Keypad.h>      // Keypad library to handle matrix keypad setup
+#include <Keypad.h> // Keypad library to handle matrix keypad setup
 #include <BleKeyboard.h> // For ESP32 Bluetooth keyboard HID https://github.com/T-vK/ESP32-BLE-Keyboard
 #include <Preferences.h> // Used to save last used profile
 #include "keymappings.h"
@@ -406,6 +406,15 @@ const char* normalKeyToString(char key) {
   return "UNKNOWN_KEY: add me to the table!";
 }
 
+// Function for display app status in debug
+const char* appstatusToString(int key) {
+  for (auto &entry : appstatusName) {
+    if (entry.code == key) {
+      return entry.name;
+    }
+  }
+}
+
 // This function handles events from the keypad.h library. Each event is only called once
 void keypad_handler(KeypadEvent key) {
 
@@ -417,7 +426,7 @@ void keypad_handler(KeypadEvent key) {
     case PRESSED: // At the 'key down' event of a button
       if (DEBUG) { Serial.println(F("keypad.getState = PRESSED"));}
       last_keypad_state = keypad.getState();
-      if (DEBUG) { Serial.print(F("+++++ App status: ")); Serial.println(app_status); }
+      if (DEBUG) { Serial.print(F("app status: ")); Serial.println(appstatusToString(app_status)); }
       if (is_key_instant(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, INSTANT);}
       else if (is_key_direct(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, DIRECT);}
       break;
@@ -452,8 +461,8 @@ void keypad_handler(KeypadEvent key) {
         Serial.println(F("keypad.getState = RELEASED"));
         Serial.print(F("Previous state: "));
         Serial.println(last_keypad_state);
-        Serial.print(F("Current app status: "));
-        Serial.println(app_status);
+        Serial.print(F("app status: "));
+        Serial.println(appstatusToString(app_status));
       }
 
       // Check if we are in the profile selected mode
@@ -500,7 +509,7 @@ void keypad_handler(KeypadEvent key) {
       if (DEBUG) {
         Serial.print(F("Profile: ")); 
         Serial.println(active_profile + 1);
-        Serial.println(F("keypad.getState = IDLE")); 
+        Serial.println(F("keypad.getState = IDLE\n")); 
         }
       last_keypad_state = keypad.getState();
 
@@ -586,8 +595,8 @@ void loop() {
         if (DEBUG) {
           Serial.print(F(">>> led_state: "));
           Serial.println(led_state);
-          Serial.print(F(">>> app_status: "));
-          Serial.println(app_status);
+          Serial.print(F("app_status: "));
+          Serial.println(appstatusToString(app_status));
           Serial.println("");
         }
         digitalWrite(LED_PIN, led_state); // Update the led

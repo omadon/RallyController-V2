@@ -210,3 +210,16 @@ NormalKeyName normalKeyNames[] = {
   { KEY_DELETE, "KEY_DELETE" },
   { KEY_ESC, "KEY_ESC" }
 };
+
+// We want app status  names in the debug output
+struct AppStatusName {
+  const int code;
+  const char* name;
+};
+
+AppStatusName appstatusName[] = {
+  { 0, "BT_DISCONNECTED" },
+  { 1, "CONFIG_MENU" },
+  { 2, "MAIN_MENU" },
+  { 3, "KEYMAP_STATUS" }
+};
