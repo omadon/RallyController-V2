@@ -1,7 +1,7 @@
 /*
     RCntrl firmware v2 by Omadon
     
-    Version 2.23
+    Version 2.24
 
     Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller 
     
@@ -59,10 +59,12 @@ const int BaudRate = 460800;
 
 // Firmware version
 const int firmware_version_major = 2;
-const int firmware_version_minor = 23;
+const int firmware_version_minor = 24;
 
 #include <Keypad.h> // Keypad library to handle matrix keypad setup
+//#define USE_NIMBLE
 #include <BleKeyboard.h> // For ESP32 Bluetooth keyboard HID https://github.com/T-vK/ESP32-BLE-Keyboard
+#include <NimBLEDevice.h>
 #include <Preferences.h> // Used to save last used profile
 #include "keymappings.h"
 
@@ -97,9 +99,10 @@ char profile_key_buffer[PROFILE_SEQ_LENGTH];
 int profile_buf_index = 0;
 bool profile_select_mode = false;
 
-// Device name should match the current active profile "RCntrl V2 P.1"
-BleKeyboard bleKeyboard(bt_device_profiles[0].name, bt_device_profiles[0].manufacturer, bt_device_profiles[0].batteryLevel);
-BLEServer* pServer = NULL;
+// Device name should match the current active profile "BarButtons"
+#define Bt_DEVICE_PROFILE 3
+BleKeyboard bleKeyboard(bt_device_profiles[Bt_DEVICE_PROFILE].name, bt_device_profiles[Bt_DEVICE_PROFILE].manufacturer, bt_device_profiles[Bt_DEVICE_PROFILE].batteryLevel);
+//NimBLEServer* pServer = NULL;
 
 // For OTA updates, requires implementation, we will do this later
 #include <WiFi.h>
@@ -374,10 +377,9 @@ void change_profile (char key, bool longPress) {
 } 
 // Change BLE advertisment name, IOS users will see update after BT restart
 void updateBleName(const char* newName) {
-    // Change BLE advertisment
-    pServer->getAdvertising()->stop();
-    esp_ble_gap_set_device_name(newName);
-    pServer->startAdvertising();
+    NimBLEDevice::stopAdvertising();
+    NimBLEDevice::setDeviceName(newName);
+    NimBLEDevice::startAdvertising();
 }
 
 // Function for display media buttons in debug

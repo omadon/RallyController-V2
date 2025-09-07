@@ -64,7 +64,7 @@ char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
  // Profil 3 short press
   { 0, 0, 0, 0, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW }, // Media profile with Volume/Play/Pause/Stop/Prev/Next + longpress for PLAY/PAUSE/STOP + arrow buttons for the second controller
   // Profil 4 short press
-   { KEY_F6, KEY_F7, KEY_RETURN, KEY_F5, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW },  // DMD2
+   { KEY_F6, KEY_F7, KEY_RETURN, KEY_ESC, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW },  // DMD2
   // Profil 5 short press
   { KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8 }, // generic profile with Function keys that can be mapped inside application
   // Profil 6 short press
@@ -72,7 +72,7 @@ char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 7 short press
   { KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8 }, //SpeedoX MyRide
   // Profil 8 short press
-  { KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_F6, KEY_F7, KEY_RETURN, KEY_F5 },  // Inverted DMD2
+  { KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_F6, KEY_F7, KEY_RETURN, KEY_ESC },  // Inverted DMD2
   // Profil 1 long press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 2 long press
@@ -111,7 +111,7 @@ const uint8_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   // If there is a mapping for long press, instead of sending repeating key, single key with new mapping is sent
   // Profil 1 long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 },
-    // Profil w long press 
+    // Profil 2 long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 3 long press 
   // if you use long press keys, make sure that you configure those keys as non-instant by modifying "key_actions" table
