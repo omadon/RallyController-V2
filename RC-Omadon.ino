@@ -1,7 +1,7 @@
 /*
     RCntrl firmware v2 by Omadon
     
-    Version 2.24
+    Version 2.25
 
     Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller 
     
@@ -59,11 +59,11 @@ const int BaudRate = 460800;
 
 // Firmware version
 const int firmware_version_major = 2;
-const int firmware_version_minor = 24;
+const int firmware_version_minor = 25;
 
 #include <Keypad.h> // Keypad library to handle matrix keypad setup
 //#define USE_NIMBLE
-#include <BleKeyboard.h> // For ESP32 Bluetooth keyboard HID https://github.com/T-vK/ESP32-BLE-Keyboard
+#include <BleKeyboard.h> // For ESP32 Bluetooth keyboard HID nimBLE support https://github.com/wakwak-koba/ESP32-NimBLE-Keyboard (remembers paired keyboard)
 #include <NimBLEDevice.h>
 #include <Preferences.h> // Used to save last used profile
 #include "keymappings.h"
