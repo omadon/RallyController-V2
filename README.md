@@ -15,8 +15,9 @@ Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roa
 
 ## Required Libraries
 
-- [ESP32-BLE-Keyboard v0.3.2-beta](https://github.com/T-vK/ESP32-BLE-Keyboard/releases/tag/0.3.2-beta) – install via `.zip` file  
-- Bounce2 – install via Arduino IDE (version 2.71)
+- NimBLE-Arduino 2.5.0
+- HijelHID_BLEKeyboard 0.5.0
+- Keypad 3.1.1
 
 ---
 
