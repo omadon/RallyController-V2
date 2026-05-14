@@ -2,7 +2,7 @@
 /*
     RCntrl firmware v2 by Omadon
     
-    Version 2.30
+    Version 2.31
 
     Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller 
     
@@ -74,17 +74,17 @@
 
 // Debug flag, set to 0 in production. Adjust baud rate if required
 const int DEBUG = 1;
-const int BaudRate = 115200;
+const int BaudRate = 460800;
 
 // Firmware version
 const int firmware_version_major = 2;
-const int firmware_version_minor = 30;
+const int firmware_version_minor = 31;
 
-#include <Keypad.h> // Keypad library to handle matrix keypad setup
 #include <HijelHID_BLEKeyboard.h>
 #include <BLEHIDKeys.h>
 #include <BLEHIDMediaKeys.h>
 #include "keymappings.h"
+#include <Keypad.h> // Keypad library to handle matrix keypad setup
 #include <Preferences.h> // Used to save last used profile
 
 Preferences preferences;
@@ -107,8 +107,8 @@ char keys[ROWS][COLS] = {
 byte colPins[COLS] = {25, 26, 27}; // 25->(1L,4L,7L), 26->(2L,5L,8L), 27->(3L,6L,9L)
 byte rowPins[ROWS] = {18, 19, 21}; // 18->(1R,2R,3R), 19->(4R,5R,6R), 21->(7R,8R,9R)
 
-//#define LED_PIN 13    //   status led, PIN2 for internal LED
-#define LED_PIN 5
+//#define LED_PIN 5    //   status led, PIN2 for internal LED
+#define LED_PIN 13
 int active_profile = 0; // Currently active profile
 
 // Sequence for changing profile
@@ -116,6 +116,7 @@ int active_profile = 0; // Currently active profile
 char profile_change_seq[PROFILE_SEQ_LENGTH] = { '1', '2', '3', '4' }; // Press 1 2 3 4 to change the profile
 char profile_key_buffer[PROFILE_SEQ_LENGTH]; 
 int profile_buf_index = 0;
+
 bool profile_select_mode = false;
 
 // Device name should match the current active profile "BarButtons"
@@ -153,24 +154,39 @@ const int long_press_repeat_interval = 100;
 
 int app_status = BT_DISCONNECTED;
 
-int led_delays[4][2] = {  // holds the on/off pattern/times for the different status'es
-  { 200,  3000  },    // BT_DISCONNECTED
-  { 3000,  100 },     // CONFIG_MENU
-//  { 5000, 100  }, // MAIN_MENU blink every 10h, almost never! Use { 5000, 100  } for normal blinking
-  { 3600000, 100  }, // MAIN_MENU blink every 10h, almost never! Use { 5000, 100  } for normal blinking
-  { 5000, 100  }      // KEYMAP_STATUS
+int led_mod_delays[4][2] = {  // holds the off/on pattern/times for the different status'es
+  { 3000,     200  }, // BT_DISCONNECTED
+  { 3000,     100 },  // CONFIG_MENU
+  { 36000000, 100 },  // MAIN_MENU blink every 10h, almost never! Use { 5000, 100  } for normal blinking
+  { 300,      300  }  // KEYMAP_STATUS
 };
 
-int keymap_indicator_led_delays[2] = { 300, 300 };  // How long should flash the led on and off for keymap indicator?
-int keymap_indicator_countdown = 0;  // keeps track of the countdown for the keymap flashes
+enum LedMode {
+  LED_ON,
+  LED_OFF,
+  LED_STATUS,
+  LED_FLASH,
+  LED_PROFILE
+};
+LedMode ledMode = LED_STATUS;
 
-int led_state = 0;       // holds the state of the led (0=LOW, 1=HIGH)
-int led_state_time = 0;  // holds the time we've switched to the current led_state
+struct LedController {
+  bool state = LOW;
+  unsigned long lastChange = 0;
+
+  int repeat = 0;
+  int completed = 0;
+
+  int onTime = 100;
+  int offTime = 100;
+};
+
+LedController led;
 
 // Routine to send the keystrokes on a short press of the keypad
 void send_short_press(KeypadEvent key, int key_action = INSTANT, int profile_offset = 0) {
 
-  if (DEBUG) {Serial.print(F("Sending short press key "));Serial.println(key);}
+  if (DEBUG) {Serial.print(F(" Sending short press key "));Serial.println(key);}
 
   // We're in the main menu
   if (app_status == MAIN_MENU || app_status == KEYMAP_STATUS || app_status == BT_DISCONNECTED) {
@@ -190,7 +206,7 @@ void send_short_press(KeypadEvent key, int key_action = INSTANT, int profile_off
 // Routine to send the keystrokes on a long press of the keypad
 void send_long_press(KeypadEvent key) {
 
-  if (DEBUG) {Serial.print(F("Sending long press key for button "));Serial.println(key);}
+  if (DEBUG) {Serial.print(F(" Sending long press key for button "));Serial.println(key);}
 
   // We're in the main menu, or offline
   if (app_status == MAIN_MENU || app_status == KEYMAP_STATUS || app_status == BT_DISCONNECTED) {
@@ -207,6 +223,70 @@ void send_long_press(KeypadEvent key) {
   }
 }
 
+// Set LED state and mark the time of the change
+void setLed(bool state) {
+  digitalWrite(LED_PIN, state);
+  led.state = state;
+  led.lastChange = millis();
+}
+
+// Flash the LED on given parameters
+void ledFlash(int repeat, int onTime, int offTime) {
+  ledMode = LED_FLASH;
+  led.repeat = repeat;
+  led.completed = 0;
+  led.onTime = onTime;
+  led.offTime = offTime;
+  setLed(HIGH);
+}
+// Flash the LED to indicate current profile
+void ledProfileBlink(int count) {
+  ledMode = LED_PROFILE;
+  led.repeat = count;
+  led.completed = 0;
+  led.onTime = led_mod_delays[KEYMAP_STATUS][1];
+  led.offTime = led_mod_delays[KEYMAP_STATUS][0];
+  setLed(HIGH);
+}
+
+void ledStatusMode() {
+  ledMode = LED_STATUS;
+}
+void updateLed() {
+  unsigned long now = millis();
+
+  switch (ledMode) {
+
+    case LED_FLASH:
+    case LED_PROFILE:
+
+      if (led.state && now - led.lastChange >= led.onTime) {
+        setLed(LOW);
+      }
+      else if (!led.state && now - led.lastChange >= led.offTime) {
+        led.completed++;
+        if (DEBUG) {Serial.print(F(" *** LED FLASH Completed: "));Serial.print(led.completed);Serial.print(F("/"));Serial.println(led.repeat);}
+
+        if (led.completed >= led.repeat) {
+          ledMode = LED_STATUS;
+          return;
+        }
+        setLed(HIGH);
+      }
+      break;
+
+    case LED_STATUS:
+      if (now - led.lastChange >= led_mod_delays[app_status][led.state]) {
+        setLed(!led.state);
+      }
+      break;
+
+    case LED_OFF:
+      setLed(LOW);
+      break;
+  }
+}
+
 // Routine that waits while a key is held, returns true if the key is held
 // for the entire time, otherwise false. Time is in milliseconds
 bool wait_for_key_hold(int key_hold_time) {
@@ -215,7 +295,7 @@ bool wait_for_key_hold(int key_hold_time) {
 
   // Loop as long as both a button is held, and the time has not passed
   while (keypad.getState() == HOLD && millis() < (wait_for_key_hold_start_time + key_hold_time)) {
-    delay(20); // Just wait a little
+    delay(10); // Just wait a little
     keypad.getKey(); // update keypad event handler
   }
   
@@ -223,7 +303,7 @@ bool wait_for_key_hold(int key_hold_time) {
   if (keypad.getState() == HOLD) {
       return true;
   } else {
-    return false;
+      return false;
   }
 
 }
@@ -234,10 +314,10 @@ void send_single_key(int profile, int keyIndex, int key_action) {
     uint8_t key = profiles_normal[profile][keyIndex];
     if (key_action == INSTANT) {
       bleKeyboard.write(key);
-      if (DEBUG) { Serial.print(F("Sending normal INSTANT key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
+      if (DEBUG) { Serial.print(F(" Sending normal INSTANT key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
     } else if (key_action == DIRECT) {
       bleKeyboard.press(key);
-      if (DEBUG) { Serial.print(F("Sending normal DIRECT key: "));  Serial.println(normalKeyToString(key)); }
+      if (DEBUG) { Serial.print(F(" Sending normal DIRECT key: "));  Serial.println(normalKeyToString(key)); }
     } 
   } 
   else if (profiles_media[profile][keyIndex] != 0) {
@@ -251,17 +331,17 @@ void send_single_key(int profile, int keyIndex, int key_action) {
     }
     */
   }
-  flash_led(1, 150, 0); 
+  ledFlash(1, 150, 0); 
 }
 // Routine that sends a key repeatedly (for single char)
 void send_repeating_key(int profile, int keyIndex) {
-  digitalWrite(LED_PIN, HIGH);
+  //digitalWrite(LED_PIN, HIGH);
   bool ledState = false;
   while (keypad.getState() == HOLD) {
     // Check if we are sending normal or media keys
     if (profiles_normal[profile][keyIndex] != 0) {
       bleKeyboard.write(profiles_normal[profile][keyIndex]);
-      if (DEBUG) { Serial.print(F("Sending normal key: "));  Serial.println(profiles_normal[profile][keyIndex]); }
+      if (DEBUG) { Serial.print(F("  Sending normal key: "));  Serial.println(profiles_normal[profile][keyIndex]); }
 
     } 
     else if (profiles_media[profile][keyIndex] != 0) {
@@ -273,7 +353,7 @@ void send_repeating_key(int profile, int keyIndex) {
     keypad.getKey(); // update keypad event handler
     yield();
   }
-  digitalWrite(LED_PIN, LOW);
+  //digitalWrite(LED_PIN, LOW);
 }
 // Check if longpress mapping exists in the table
 bool has_long_press_mapping(KeypadEvent key) {
@@ -296,23 +376,6 @@ bool has_long_press_mapping(KeypadEvent key) {
     return false; // nema mappinga
 }
 
-
-// Quick flash of the led (assuming led is off)
-void flash_led(int repeat, int on_time, int off_time) {
-  if (DEBUG) { Serial.print(F("Flashing led: "));  Serial.println(repeat); }
-  for (int i = 0; i < repeat; i++){
-    
-    digitalWrite(LED_PIN, HIGH);
-    delay(on_time);
-    digitalWrite(LED_PIN, LOW);
-
-    //Skipp the last off_time in when flashing
-    if (i < (repeat-1)) {
-      delay(off_time);
-    }
-  }
-}
-
 // Helper function: returns 0, 1, or 2 depending on the mapping
 int get_key_mode(int key_index) {
   return key_actions[active_profile][key_index];
@@ -321,7 +384,7 @@ int get_key_mode(int key_index) {
 // Helper function to determine if a key is release"
 int is_key_release(char key_pressed) {
   if (get_key_mode(key_pressed - '1') == 0) {
-    if (DEBUG) { Serial.println("Button type: RELEASE"); }
+    if (DEBUG) { Serial.println(" Button type: RELEASE"); }
     return true;
   }
   return false;
@@ -330,7 +393,7 @@ int is_key_release(char key_pressed) {
 // Helper function to determine if a key is supposed to be instant, or we should send a key on "key up"
 int is_key_instant(char key_pressed) {
   if (get_key_mode(key_pressed - '1') == 1) {
-    if (DEBUG) { Serial.println("Button type: INSTANT"); }
+    if (DEBUG) { Serial.println(" Button type: INSTANT"); }
     return true;
   }
   return false;
@@ -339,7 +402,7 @@ int is_key_instant(char key_pressed) {
 // Helper function to determine if a key is direct"
 int is_key_direct(char key_pressed) {
   if (get_key_mode(key_pressed - '1') == 2) {
-    if (DEBUG) { Serial.println("Button type: DIRECT"); }
+    if (DEBUG) { Serial.println(" Button type: DIRECT"); }
     return true;
   }
   return false;
@@ -363,9 +426,9 @@ void set_profile(int idx) {
     //updateBleName(bt_device_profiles[active_profile].name);
     // Save current profile to survive rebooting
     preferences.putInt("profile", active_profile);
-    if (DEBUG) { Serial.print(">>>>>>>>>>>>>>>> Profile set to: "); Serial.println(active_profile + 1);}
+    if (DEBUG) { Serial.print(" >>> Profile set to: "); Serial.println(active_profile + 1);}
   }
-  else if (DEBUG) { Serial.print(">>>>>>>>>>>>>>>> Profile out of range: "); Serial.println(active_profile + 1);}
+  else if (DEBUG) { Serial.print(" >>> Profile out of range: "); Serial.println(active_profile + 1);}
 }
 
 // Select a profile by pressing a button from 1-8
@@ -390,14 +453,14 @@ void change_profile (char key, bool longPress) {
   if (profile >= 0) {
     set_profile(profile);
     profile_select_mode = false;
-    app_status = MAIN_MENU;
     if (DEBUG) {
       if (longPress) {
-        Serial.print(F(">>> Long press profile selected: ")); 
+        Serial.print(F(" >>> Long press profile selected: ")); 
       } else {
-        Serial.print(F(">>> Short press profile selected: "));
+        Serial.print(F(" >>> Short press profile selected: "));
       }
       Serial.println(profile + 1);
+      app_status = MAIN_MENU;
     }
   }
 } 
@@ -431,8 +494,8 @@ const char* normalKeyToString(char key) {
 }
 
 // Function for display app status in debug
-const char* appstatusToString(int key) {
-  for (auto &entry : appstatusName) {
+const char* AppStatusToString(int key) {
+  for (auto &entry : AppStatusNames) {
     if (entry.code == key) {
       return entry.name;
     }
@@ -440,25 +503,35 @@ const char* appstatusToString(int key) {
   return "UNKNOWN_STATUS";
 }
 
+// Function for display KeuState names in debug
+const char* KeyStateToString(int key) {
+  for (auto &entry : KeyStateNames) {
+    if (entry.code == key) {
+      return entry.name;
+    }
+  }
+  return "UNKNOWN";
+}
+
 // This function handles events from the keypad.h library. Each event is only called once
 void keypad_handler(KeypadEvent key) {
 
-  if (DEBUG) { Serial.println(F("Entering keypad handler")); }
+  if (DEBUG) { Serial.println(F("\nEntering keypad handler")); }
 
   // State changes for the buttons
   switch (keypad.getState()) {
 
     case PRESSED: // At the 'key down' event of a button
-      if (DEBUG) { Serial.println(F("keypad.getState = PRESSED"));}
-      last_keypad_state = keypad.getState();
-      if (DEBUG) { Serial.print(F("app status: ")); Serial.println(appstatusToString(app_status)); }
+      if (DEBUG) { Serial.println(F(" keypad.getState = PRESSED"));}
+      if (DEBUG) { Serial.print(F(" Aoo FSM: ")); Serial.println(AppStatusToString(app_status)); }
       if (is_key_instant(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, INSTANT);}
       else if (is_key_direct(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, DIRECT);}
+      last_keypad_state = PRESSED;
       break;
 
     case HOLD: // When a button is held beyond the long_press_time value
-      if (DEBUG) { Serial.println(F("keypad.getState = HOLD")); }
-      last_keypad_state = keypad.getState();
+      last_keypad_state = HOLD;  
+      if (DEBUG) { Serial.println(F(" keypad.getState = HOLD")); }
       
       // Check if we are in the profile selected mode
       if (profile_select_mode) {
@@ -467,7 +540,6 @@ void keypad_handler(KeypadEvent key) {
       // If we have a direct key, we already sent bleKeyboard.press no need for repeat
       // Direct keys have no mappings or repeat requirements.
       else if (is_key_direct(key)) {
-        break;
       }
       // Release key with long mapping triggers sending single key
       else  if (is_key_release(key) && has_long_press_mapping(key)) {
@@ -476,20 +548,21 @@ void keypad_handler(KeypadEvent key) {
       }
       else {
         send_long_press(key);
-      }
+      }   
       break;    
 
     case RELEASED: // When a button is released
       if (DEBUG) {
-        Serial.println(F("keypad.getState = RELEASED"));
-        Serial.print(F("Previous state: "));
-        Serial.println(last_keypad_state);
-        Serial.print(F("app status: "));
-        Serial.println(appstatusToString(app_status));
+        Serial.println(F(" keypad.getState = RELEASED"));
+        Serial.print(F(" Previous keypad.getState = "));
+        Serial.println(KeyStateToString(last_keypad_state));
+        Serial.print(F(" App FSM: "));
+        Serial.println(AppStatusToString(app_status));
       }
 
       // Check if we are in the profile selected mode
       if (profile_select_mode) {
+        //app_status = KEYMAP_STATUS;
         change_profile(key, false);
       } 
       else {
@@ -500,54 +573,40 @@ void keypad_handler(KeypadEvent key) {
         // Check if profile change sequence has been entered
         if (profile_check_sequence()) {
           profile_select_mode = true;
-          delay(500);
-          // change to KEYMAP_STATUS profile to report current selected profile via LED
-          app_status = KEYMAP_STATUS;
-          keymap_indicator_countdown = active_profile+1;
-          if (DEBUG) {Serial.println(F(">>> Enter profile selection mode: press 1-8 to select profile")); }
+          //delay(500);
+          ledProfileBlink(active_profile + 1);
+          if (DEBUG) {Serial.println(F(" >>> Enter profile selection mode: press 1-8 to select profile")); }
+          app_status = CONFIG_MENU;
         }
       }
 
       // Release key, we are sending a key on "key up"
       if (last_keypad_state == PRESSED) {
-//        if (!(is_key_instant(key) && app_status != CONFIG_MENU)) {
+        //if (!(is_key_instant(key) && app_status != CONFIG_MENU)) {
           if (is_key_release(key) && app_status != CONFIG_MENU) {
             send_short_press(key, INSTANT);
         }
       }
 
-      last_keypad_state = keypad.getState();
-
-      // Turn off the status led  in normal mode 
-      if (app_status == MAIN_MENU || app_status == KEYMAP_STATUS) {
-        digitalWrite(LED_PIN, LOW);
-      }
-      
       // Release all keys (write() should have done this, but keys that are press()-ed should be released)
       bleKeyboard.releaseAll();
-
+      last_keypad_state = RELEASED;
       break;
     
     case IDLE: // not sure why this generates a callback
       if (DEBUG) {
-        Serial.print(F("Profile: ")); 
+        Serial.println(F(" keypad.getState = IDLE"));
+        Serial.print(F(" App FSM: ")); Serial.println(AppStatusToString(app_status));
+        Serial.print(F(" Profile: ")); 
         Serial.println(active_profile + 1);
-        Serial.println(F("keypad.getState = IDLE\n")); 
         }
-      last_keypad_state = keypad.getState();
-
-      // Turn off the status led  in normal mode 
-      if (app_status == MAIN_MENU || app_status == KEYMAP_STATUS) {
-        digitalWrite(LED_PIN, LOW);
-      }
 
       // Release all keys (write() should have done this, but keys that are press()-ed should be released)
       bleKeyboard.releaseAll();
-
+      last_keypad_state = IDLE;
       break;
   }
 }
-
 
 // Arduino built-in setup loop
 void setup() {
@@ -582,7 +641,7 @@ void setup() {
   active_profile = preferences.getInt("profile", 0);
   set_profile(active_profile);
 
-  Serial.println("Cntrl_V2: Setup DONE and DONE");
+  Serial.println("Cntrl_V2: Setup DONE");
   delay(1000);
   // End of setup()
 }
@@ -590,58 +649,21 @@ void setup() {
 void loop() {
   
   static unsigned long lastPrint = 0;
-  
-  if (millis() - lastPrint > 1000) {
-    Serial.println("Alive");
-    lastPrint = millis();
-  }
 
   // Need to call this function constantly to make the keypad library work
   keypad.getKey();
+  // Update LED state if required
+  updateLed();
 
   // Blink based on BT connectivity
   //
   if (app_status == BT_DISCONNECTED && bleKeyboard.isConnected())  {
+    Serial.println("\nRCntrl_V2: Keyboard connected...");
     app_status = MAIN_MENU;
   }
   if (app_status != BT_DISCONNECTED && app_status != CONFIG_MENU && !bleKeyboard.isConnected()) {
     app_status = BT_DISCONNECTED;
-    // Restart BLE keyboard da Android ponovo poveže
-    //resetBleKeyboard();
-  }
-  
-  // IDLE state, you can flash LED while waiting
-  if (keypad.getState() == IDLE) {    
-  // Number fo blinks equals to the profile number 
-    if (app_status == KEYMAP_STATUS) {
-      // If the current led state is expired
-      if ((millis() - led_state_time) > keymap_indicator_led_delays[led_state]) {
-        led_state = 1 - led_state; // Toggle between 0 and 1
-        digitalWrite(LED_PIN, led_state); // Update the led
-        led_state_time = millis(); // update last switch
 
-        if (led_state == 0) { // we just completed a keymap flash
-          keymap_indicator_countdown--; 
-          if (keymap_indicator_countdown == 0) {
-            app_status = CONFIG_MENU;           
-          }
-        }
-      } 
-    // Blinking for the MAIN_MENU, CONFIGURATION_MENU 
-    } else { 
-      if ((millis() - led_state_time) > led_delays[app_status][led_state]) {
-        led_state = 1 - led_state; // Toggle between 0 and 1
-        if (DEBUG) {
-          Serial.print(">>> led_state: ");
-          Serial.println(led_state);
-          Serial.print("app_status: ");
-          Serial.println(appstatusToString(app_status));
-          Serial.println("");
-        }
-        digitalWrite(LED_PIN, led_state); // Update the led
-        led_state_time = millis(); // update last switch
-      }
-    }
   }
 
   delay(1);yield();

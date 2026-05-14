@@ -220,9 +220,21 @@ struct AppStatusName {
   const char* name;
 };
 
-AppStatusName appstatusName[] = {
+AppStatusName AppStatusNames[] = {
   { 0, "BT_DISCONNECTED" },
   { 1, "CONFIG_MENU" },
   { 2, "MAIN_MENU" },
   { 3, "KEYMAP_STATUS" }
+};
+
+struct KeyStateName {
+  const int code;
+  const char* name;
+};
+
+KeyStateName KeyStateNames[] = {
+  { 0, "IDLE" },
+  { 1, "PRESSED" },
+  { 2, "HOLD" },
+  { 3, "RELEASED" }
 };
