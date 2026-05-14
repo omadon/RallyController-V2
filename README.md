@@ -1,7 +1,7 @@
 
 # RCntrl Firmware v2 by Omadon
 
-**Version:** 2.20
+**Version:** 2.30
 
 Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller.
 

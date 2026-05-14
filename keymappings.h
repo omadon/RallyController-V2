@@ -31,7 +31,7 @@
 // 1. normal_profiles:
 //    - Stores standard keyboard keys (letters, numbers, symbols, arrows, etc.).
 //    - These are represented as char values (e.g. 'a', '-', '1') or special
-//      constants like KEY_RETURN, KEY_UP_ARROW, etc.
+//      constants like KEY_RETURN, KEY_UP, etc.
 //    - Use this table when you want the keypad to behave like a regular keyboard.
 //
 // 2. media_profiles:
@@ -58,21 +58,21 @@
 
 char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 1 short press
-  { '=', '-', 'r','c', KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW }, // Original RCntrl P.1 + arrow buttons for the second controller
+  { '=', '-', 'r','c', KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN }, // Original RCntrl P.1 + arrow buttons for the second controller
   // Profil 2 short press
-  { 0, 0, 0, 0, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW }, // Original RCntrl P.2  + arrow buttons for the second controller
+  { 0, 0, 0, 0, KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN }, // Original RCntrl P.2  + arrow buttons for the second controller
  // Profil 3 short press
-  { 0, 0, 0, 0, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW }, // Media profile with Volume/Play/Pause/Stop/Prev/Next + longpress for PLAY/PAUSE/STOP + arrow buttons for the second controller
+  { 0, 0, 0, 0, KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN }, // Media profile with Volume/Play/Pause/Stop/Prev/Next + longpress for PLAY/PAUSE/STOP + arrow buttons for the second controller
   // Profil 4 short press
-   { KEY_F6, KEY_F7, KEY_RETURN, KEY_ESC, KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW },  // DMD2
+   { KEY_F6, KEY_F7, KEY_RETURN, KEY_ESCAPE, KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN },  // DMD2
   // Profil 5 short press
   { KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8 }, // generic profile with Function keys that can be mapped inside application
   // Profil 6 short press
-  { '+', '-', 'D', 'C', KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW }, // Navigation
+  { '+', '-', 'D', 'C', KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN }, // Navigation
   // Profil 7 short press
   { KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8 }, //SpeedoX MyRide
   // Profil 8 short press
-  { KEY_UP_ARROW, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_F6, KEY_F7, KEY_RETURN, KEY_ESC },  // Inverted DMD2
+  { KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN, KEY_F6, KEY_F7, KEY_RETURN, KEY_ESCAPE },  // Inverted DMD2
   // Profil 1 long press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 2 long press
@@ -91,13 +91,15 @@ char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
   { 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
-const uint8_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
+const uint16_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 1 short press
   { 0, 0, 0, 0, 0, 0, 0, 0 }, 
   // Profil 2 short press
-  { KEY_MEDIA_PREVIOUS_TRACK, KEY_MEDIA_NEXT_TRACK, KEY_MEDIA_VOLUME_DOWN, KEY_MEDIA_VOLUME_UP, 0, 0, 0, 0 }, 
+  { 0, 0, 0, 0, 0, 0, 0, 0 },
+  //{ MEDIA_PREV_TRACK, MEDIA_NEXT_TRACK, MEDIA_VOLUME_DOWN, MEDIA_VOLUME_UP, 0, 0, 0, 0 }, 
   // Profil 3 short press
-  { KEY_MEDIA_NEXT_TRACK, KEY_MEDIA_PREVIOUS_TRACK, KEY_MEDIA_VOLUME_UP, KEY_MEDIA_VOLUME_DOWN, 0, 0, 0, 0 }, 
+  { 0, 0, 0, 0, 0, 0, 0, 0 },
+  //{ MEDIA_NEXT_TRACK, MEDIA_PREV_TRACK, MEDIA_VOLUME_UP, MEDIA_VOLUME_DOWN, 0, 0, 0, 0 }, 
   // Profil 4 short press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 5 short press
@@ -118,9 +120,10 @@ const uint8_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   // if you leave keys as instant keys, they will first send normal key and than long press key
   // Example for profile2: 
   //    first two buttons are non-instant, meaning key will be sent when you release the button (no repeat of course)
-  //    button 1: * short press - > KEY_MEDIA_NEXT_TRACK       button 2: * short press - > KEY_MEDIA_PREVIOUS_TRACK
-  //              * long press  - > KEY_MEDIA_PLAY_PAUSE                  * long press  - > KEY_MEDIA_STOP
-  { KEY_MEDIA_PLAY_PAUSE, KEY_MEDIA_STOP, 0, 0, 0, 0, 0, 0 },
+  //    button 1: * short press - > MEDIA_NEXT_TRACK       button 2: * short press - > MEDIA_PREV_TRACK
+  //              * long press  - > MEDIA_PLAY_PAUSE                  * long press  - > MEDIA_STOP
+  { 0, 0, 0, 0, 0, 0, 0, 0 },
+  //{ MEDIA_PLAY_PAUSE, MEDIA_STOP, 0, 0, 0, 0, 0, 0 },
   // Profil 4 long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 5 long press 
@@ -158,7 +161,7 @@ BTDeviceInfo bt_device_profiles[8] = {
   { "RCntrl V2 P.1", "S.R.I. Omadon", 55 }, // Profil 1
   { "RCntrl V2 P.2", "S.R.I. Omadon", 55 }, // Profil 2
   { "RCntrl V2 P.3", "S.R.I. Omadon", 55 }, // Profil 3
-  { "BarButtons",    "S.R.I. Omadon", 55 }, // Profil 4
+  { "BarButtons",    "BarButtons", 55 }, // Profil 4
   { "RCntrl V2 P.5", "S.R.I. Omadon", 55 }, // Profil 5
   { "RCntrl V2 P.6", "S.R.I. Omadon", 55 }, // Profil 6
   { "RCntrl V2 P.7", "S.R.I. Omadon", 55 }, // Profil 7
@@ -168,18 +171,18 @@ BTDeviceInfo bt_device_profiles[8] = {
 
 // We want real names in the debug output
 struct MediaKeyName {
-  const uint8_t* code;
+  const uint16_t code;
   const char* name;
 };
 
 MediaKeyName mediaKeyNames[] = {
-  { KEY_MEDIA_NEXT_TRACK, "KEY_MEDIA_NEXT_TRACK" },
-  { KEY_MEDIA_PREVIOUS_TRACK, "KEY_MEDIA_PREVIOUS_TRACK" },
-  { KEY_MEDIA_PLAY_PAUSE, "KEY_MEDIA_PLAY_PAUSE" },
-  { KEY_MEDIA_STOP, "KEY_MEDIA_STOP" },
-  { KEY_MEDIA_MUTE, "KEY_MEDIA_MUTE" },
-  { KEY_MEDIA_VOLUME_UP, "KEY_MEDIA_VOLUME_UP" },
-  { KEY_MEDIA_VOLUME_DOWN, "KEY_MEDIA_VOLUME_DOWN" }
+  { MEDIA_NEXT_TRACK, "MEDIA_NEXT_TRACK" },
+  { MEDIA_PREV_TRACK, "MEDIA_PREV_TRACK" },
+  { MEDIA_PLAY_PAUSE, "MEDIA_PLAY_PAUSE" },
+  { MEDIA_STOP, "MEDIA_STOP" },
+  { MEDIA_MUTE, "MEDIA_MUTE" },
+  { MEDIA_VOLUME_UP, "MEDIA_VOLUME_UP" },
+  { MEDIA_VOLUME_DOWN, "MEDIA_VOLUME_DOWN" }
 };
 
 struct NormalKeyName {
@@ -201,14 +204,14 @@ NormalKeyName normalKeyNames[] = {
   { KEY_F11, "KEY_F11" },
   { KEY_F12, "KEY_F12" },
   { KEY_RETURN, "KEY_RETURN" },
-  { KEY_UP_ARROW, "KEY_UP_ARROW" },
-  { KEY_DOWN_ARROW, "KEY_DOWN_ARROW" },
-  { KEY_LEFT_ARROW, "KEY_LEFT_ARROW" },
-  { KEY_RIGHT_ARROW, "KEY_RIGHT_ARROW" },
+  { KEY_UP, "KEY_UP" },
+  { KEY_DOWN, "KEY_DOWN" },
+  { KEY_LEFT, "KEY_LEFT" },
+  { KEY_RIGHT, "KEY_RIGHT" },
   { KEY_TAB, "KEY_TAB" },
   { KEY_BACKSPACE, "KEY_BACKSPACE" },
   { KEY_DELETE, "KEY_DELETE" },
-  { KEY_ESC, "KEY_ESC" }
+  { KEY_ESCAPE, "KEY_ESCAPE" }
 };
 
 // We want app status  names in the debug output

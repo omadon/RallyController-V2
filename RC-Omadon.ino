@@ -1,7 +1,7 @@
 /*
     RCntrl firmware v2 by Omadon
     
-    Version 2.25
+    Version 2.30
 
     Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller 
     
@@ -14,11 +14,29 @@
     https://jaxeadv.com/barbuttons-files/barbuttons.ino 
     
     Required Libraries:
-    https://github.com/T-vK/ESP32-BLE-Keyboard/releases/tag/0.3.2-beta - install via .zip file
-    Bounce2 - use Arduine IDE to install (2.71)
+      NimBLE-Arduino
+      HijelHID_BLEKeyboard
+      Keypad
+    
+    Tested on:
+      NimBLE-Arduino 2.5.0
+      HijelHID_BLEKeyboard 0.5.0
+      Keypad 3.1.1
+    Boards: esp32 3.3.8
+
+    Myboard: ESP-WROOM-32 30pin USBC
+      Board: ESP32 Dev Module
+      CPU Frequency: 240 MHz
+      Flash Frequency: 40 MHz
+      Flash Mode: QIO
+      Flash Size: 4MB
+      Partition Scheme: Minimal with OTA
+
 
   Difference from the original firmware:
     - Uses the Keypad library (with event handler that simplifies button state handling).
+    - void Keypad::scanKeys() was modifed and added delay(4) to compensate for longer wires
+    - Uses HijelHID compatible BLE keyboard
     - Support for two controllers in daisy chain, connected to each other or to the controller box.
     - With keypad scanning we can daisy chain controllers using UTP 
       (5/6 wires for buttons + 2 wires for the LED).
@@ -55,18 +73,18 @@
 
 // Debug flag, set to 0 in production. Adjust baud rate if required
 const int DEBUG = 1;
-const int BaudRate = 460800;
+const int BaudRate = 115200;
 
 // Firmware version
 const int firmware_version_major = 2;
-const int firmware_version_minor = 25;
+const int firmware_version_minor = 30;
 
 #include <Keypad.h> // Keypad library to handle matrix keypad setup
-//#define USE_NIMBLE
-#include <BleKeyboard.h> // For ESP32 Bluetooth keyboard HID nimBLE support https://github.com/wakwak-koba/ESP32-NimBLE-Keyboard (remembers paired keyboard)
-#include <NimBLEDevice.h>
-#include <Preferences.h> // Used to save last used profile
+#include <HijelHID_BLEKeyboard.h>
+#include <BLEHIDKeys.h>
+#include <BLEHIDMediaKeys.h>
 #include "keymappings.h"
+#include <Preferences.h> // Used to save last used profile
 
 Preferences preferences;
 
@@ -85,11 +103,11 @@ char keys[ROWS][COLS] = {
 // Connection diagram is very simple, follow the comments below or matrix above
 // 1L, (button 1, left pin), 1R, (button 1, right pin)
 // Make jumper connection from button to button, don't aggregate to the ESP32 pin
-byte colPins[COLS] = {18, 19, 21}; // 18->(1L,4L,7L), 19->(2L,5L,8L), 21->(3L,6L,9L)
-byte rowPins[ROWS] = {22, 23, 25}; // 22->(1R,2R,3R), 23->(4R,5R,6R), 25->(7R,8R,9R)
+byte colPins[COLS] = {25, 26, 27}; // 25->(1L,4L,7L), 26->(2L,5L,8L), 27->(3L,6L,9L)
+byte rowPins[ROWS] = {18, 19, 21}; // 18->(1R,2R,3R), 19->(4R,5R,6R), 21->(7R,8R,9R)
 
-#define LED_PIN 12    //   status led, PIN2 for internal LED
-
+//#define LED_PIN 13    //   status led, PIN2 for internal LED
+#define LED_PIN 5
 int active_profile = 0; // Currently active profile
 
 // Sequence for changing profile
@@ -100,11 +118,11 @@ int profile_buf_index = 0;
 bool profile_select_mode = false;
 
 // Device name should match the current active profile "BarButtons"
-#define Bt_DEVICE_PROFILE 3
-BleKeyboard bleKeyboard(bt_device_profiles[Bt_DEVICE_PROFILE].name, bt_device_profiles[Bt_DEVICE_PROFILE].manufacturer, bt_device_profiles[Bt_DEVICE_PROFILE].batteryLevel);
-//NimBLEServer* pServer = NULL;
-
+#define BT_DEVICE_PROFILE 3
+//BleKeyboard bleKeyboard(bt_device_profiles[BT_DEVICE_PROFILE].name, bt_device_profiles[BT_DEVICE_PROFILE].manufacturer, bt_device_profiles[BT_DEVICE_PROFILE].batteryLevel);
+HijelHID_BLEKeyboard bleKeyboard(bt_device_profiles[BT_DEVICE_PROFILE].name, bt_device_profiles[BT_DEVICE_PROFILE].manufacturer, bt_device_profiles[BT_DEVICE_PROFILE].batteryLevel);
 // For OTA updates, requires implementation, we will do this later
+
 #include <WiFi.h>
 #include <Update.h>
 const char* SSID = "RCntrl";
@@ -212,15 +230,17 @@ bool wait_for_key_hold(int key_hold_time) {
 void send_single_key(int profile, int keyIndex, int key_action) {
   // Check if we are sending normal or media keys
   if (profiles_normal[profile][keyIndex] != 0) {
+    uint8_t key = profiles_normal[profile][keyIndex];
     if (key_action == INSTANT) {
-      bleKeyboard.write(profiles_normal[profile][keyIndex]);
+      bleKeyboard.write(key);
       if (DEBUG) { Serial.print(F("Sending normal INSTANT key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
     } else if (key_action == DIRECT) {
-      bleKeyboard.press(profiles_normal[profile][keyIndex]);
-      if (DEBUG) { Serial.print(F("Sending normal DIRECT key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
+      bleKeyboard.press(key);
+      if (DEBUG) { Serial.print(F("Sending normal DIRECT key: "));  Serial.println(normalKeyToString(key)); }
     } 
   } 
   else if (profiles_media[profile][keyIndex] != 0) {
+    /*
     if (key_action == INSTANT) {
       bleKeyboard.write(profiles_media[profile][keyIndex]);
       if (DEBUG) { Serial.print(F("Sending media INSTANT key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
@@ -228,6 +248,7 @@ void send_single_key(int profile, int keyIndex, int key_action) {
       bleKeyboard.press(profiles_media[profile][keyIndex]);
       if (DEBUG) { Serial.print(F("Sending media DIRECT key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
     }
+    */
   }
   flash_led(1, 150, 0); 
 }
@@ -242,8 +263,8 @@ void send_repeating_key(int profile, int keyIndex) {
 
     } 
     else if (profiles_media[profile][keyIndex] != 0) {
-      bleKeyboard.write(profiles_media[profile][keyIndex]);
-      if (DEBUG) { Serial.print(F("Sending media key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
+      //ßbleKeyboard.write(profiles_media[profile][keyIndex]);
+      //if (DEBUG) { Serial.print(F("Sending media key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
 
     }
     delay(long_press_repeat_interval); // pause between presses
@@ -259,6 +280,7 @@ bool has_long_press_mapping(KeypadEvent key) {
     int long_row = active_profile + NUM_PROFILES; // long part of the table
 
     // Provjeri media tablicu
+    /*
     const uint8_t* media_key = profiles_media[long_row][idx];
     if (media_key != nullptr && media_key != 0) {
         // Ako media key postoji, provjeri normal tablicu
@@ -267,7 +289,7 @@ bool has_long_press_mapping(KeypadEvent key) {
             return true; // postoji long press mapping
         }
     }
-
+    */
     return false; // nema mappinga
 }
 
@@ -335,10 +357,10 @@ void set_profile(int idx) {
   if (idx >= 0 && idx < NUM_PROFILES) {
     active_profile = idx;
     // Change BLE advertisment name to mach profile number
-    updateBleName(bt_device_profiles[active_profile].name);
+    //updateBleName(bt_device_profiles[active_profile].name);
     // Save current profile to survive rebooting
     preferences.putInt("profile", active_profile);
-    if (DEBUG) { Serial.print(F(">>>>>>>>>>>>>>>>>> Profile set to: ")); Serial.println(active_profile + 1);}
+    if (DEBUG) { Serial.print(">>>>>>>>>>>>>>>> Profile set to: "); Serial.println(active_profile + 1);}
   }
 }
 
@@ -375,17 +397,13 @@ void change_profile (char key, bool longPress) {
     }
   }
 } 
-// Change BLE advertisment name, IOS users will see update after BT restart
-void updateBleName(const char* newName) {
-    NimBLEDevice::stopAdvertising();
-    NimBLEDevice::setDeviceName(newName);
-    NimBLEDevice::startAdvertising();
-}
+
 
 // Function for display media buttons in debug
-const char* mediaKeyToString(const uint8_t* key) {
+const char* mediaKeyToString(uint16_t key)
+{
   for (auto &entry : mediaKeyNames) {
-    if (memcmp(entry.code, key, 2) == 0) {
+    if (entry.code == key) {
       return entry.name;
     }
   }
@@ -448,12 +466,10 @@ void keypad_handler(KeypadEvent key) {
       }
       // Release key with long mapping triggers sending single key
       else  if (is_key_release(key) && has_long_press_mapping(key)) {
-        // Use the long press mapping table that has an offset equals to NUM_PROFILES
-        if (DEBUG) { Serial.println(F("+++++ Dugi Release")); }         
+        // Use the long press mapping table that has an offset equals to NUM_PROFILES   
         send_short_press(key, INSTANT, NUM_PROFILES);
       }
       else {
-        if (DEBUG) { Serial.println(F("+++++ Dugi...")); }
         send_long_press(key);
       }
       break;    
@@ -532,26 +548,30 @@ void keypad_handler(KeypadEvent key) {
 void setup() {
   
   if (DEBUG) { Serial.begin(BaudRate); }
+  Serial.begin(115200);
+
+  Serial.println("BOOT OK");
 
   // Start bluetooth keyboard 
   bleKeyboard.begin();
-
+  Serial.println("bleKeyboard OK");
   // Handle all keypad events through this listener
   keypad.addEventListener(keypad_handler); // Add an event listener for this keypad
 
   // set HoldTime
   keypad.setHoldTime(long_press_time); 
-
+  Serial.println("keypad OK");
   // Enable the led to indicate we're switched on
   pinMode(LED_PIN, OUTPUT);
-
+  Serial.println("LED OK");
   if (DEBUG) { 
-    Serial.println(F("\nStarting RCntrl V2 keyboard"));
+    Serial.println("\nStarting RCntrl V2 keyboard");
     String fw_version = String(firmware_version_major) + "." + String(firmware_version_minor);
     Serial.println("Firmware version: " + fw_version);
     }
   
-  // load profile from "settings" namespace 
+  // load profile from "settings" namespace
+  Serial.println("Loading saved profile");
   preferences.begin("settings", false);
   active_profile = preferences.getInt("profile", 0);
   set_profile(active_profile);
@@ -560,7 +580,7 @@ void setup() {
 }
 
 void loop() {
-
+  Serial.println("In the loop");
   // Need to call this function constantly to make the keypad library work
   keypad.getKey();
 
@@ -571,8 +591,10 @@ void loop() {
   }
   if (app_status != BT_DISCONNECTED && app_status != CONFIG_MENU && !bleKeyboard.isConnected()) {
     app_status = BT_DISCONNECTED;
+    // Restart BLE keyboard da Android ponovo poveže
+    //resetBleKeyboard();
   }
-
+  
   // IDLE state, you can flash LED while waiting
   if (keypad.getState() == IDLE) {    
   // Number fo blinks equals to the profile number 
@@ -607,7 +629,7 @@ void loop() {
     }
   }
 
-  delay(10);
+  delay(1);yield();
 }
 
 
