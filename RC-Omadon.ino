@@ -1,3 +1,4 @@
+
 /*
     RCntrl firmware v2 by Omadon
     
@@ -123,8 +124,8 @@ bool profile_select_mode = false;
 HijelHID_BLEKeyboard bleKeyboard(bt_device_profiles[BT_DEVICE_PROFILE].name, bt_device_profiles[BT_DEVICE_PROFILE].manufacturer, bt_device_profiles[BT_DEVICE_PROFILE].batteryLevel);
 // For OTA updates, requires implementation, we will do this later
 
-#include <WiFi.h>
-#include <Update.h>
+//#include <WiFi.h>
+//#include <Update.h>
 const char* SSID = "RCntrl";
 const char* PSWD = "12345678";
 String host = "213.147.117.10";
@@ -255,6 +256,7 @@ void send_single_key(int profile, int keyIndex, int key_action) {
 // Routine that sends a key repeatedly (for single char)
 void send_repeating_key(int profile, int keyIndex) {
   digitalWrite(LED_PIN, HIGH);
+  bool ledState = false;
   while (keypad.getState() == HOLD) {
     // Check if we are sending normal or media keys
     if (profiles_normal[profile][keyIndex] != 0) {
@@ -269,6 +271,7 @@ void send_repeating_key(int profile, int keyIndex) {
     }
     delay(long_press_repeat_interval); // pause between presses
     keypad.getKey(); // update keypad event handler
+    yield();
   }
   digitalWrite(LED_PIN, LOW);
 }
@@ -362,6 +365,7 @@ void set_profile(int idx) {
     preferences.putInt("profile", active_profile);
     if (DEBUG) { Serial.print(">>>>>>>>>>>>>>>> Profile set to: "); Serial.println(active_profile + 1);}
   }
+  else if (DEBUG) { Serial.print(">>>>>>>>>>>>>>>> Profile out of range: "); Serial.println(active_profile + 1);}
 }
 
 // Select a profile by pressing a button from 1-8
@@ -433,6 +437,7 @@ const char* appstatusToString(int key) {
       return entry.name;
     }
   }
+  return "UNKNOWN_STATUS";
 }
 
 // This function handles events from the keypad.h library. Each event is only called once
@@ -547,40 +552,50 @@ void keypad_handler(KeypadEvent key) {
 // Arduino built-in setup loop
 void setup() {
   
-  if (DEBUG) { Serial.begin(BaudRate); }
-  Serial.begin(115200);
+  Serial.begin(BaudRate);
+  Serial.println("\nRCntrl_V2: BOOT OK");
 
-  Serial.println("BOOT OK");
-
-  // Start bluetooth keyboard 
+  // Start bluetooth keyboard
+  delay(200); 
   bleKeyboard.begin();
-  Serial.println("bleKeyboard OK");
+  Serial.println("RCntrl_V2: HijelHID BLEKeyboard OK");
+  
   // Handle all keypad events through this listener
   keypad.addEventListener(keypad_handler); // Add an event listener for this keypad
 
   // set HoldTime
   keypad.setHoldTime(long_press_time); 
-  Serial.println("keypad OK");
+  Serial.println("RCntrl_V2: Keypad EventListener OK");
   // Enable the led to indicate we're switched on
-  pinMode(LED_PIN, OUTPUT);
-  Serial.println("LED OK");
-  if (DEBUG) { 
-    Serial.println("\nStarting RCntrl V2 keyboard");
-    String fw_version = String(firmware_version_major) + "." + String(firmware_version_minor);
-    Serial.println("Firmware version: " + fw_version);
-    }
+  pinMode(LED_PIN, OUTPUT);  
+  Serial.print("RCntrl_V2: LED ");
+  Serial.print(LED_PIN);
+  Serial.println(" OK");
+
+  Serial.println("\nRCntrl_V2: Starting RCntrl V2 keyboard");
+  String fw_version = String(firmware_version_major) + "." + String(firmware_version_minor);
+  Serial.println("RCntrl_V2: Firmware version: " + fw_version);
   
   // load profile from "settings" namespace
-  Serial.println("Loading saved profile");
+  Serial.println("RCntrl_V2: Loading saved profile from EPROM");
   preferences.begin("settings", false);
   active_profile = preferences.getInt("profile", 0);
   set_profile(active_profile);
 
+  Serial.println("Cntrl_V2: Setup DONE and DONE");
+  delay(1000);
   // End of setup()
 }
 
 void loop() {
-  Serial.println("In the loop");
+  
+  static unsigned long lastPrint = 0;
+  
+  if (millis() - lastPrint > 1000) {
+    Serial.println("Alive");
+    lastPrint = millis();
+  }
+
   // Need to call this function constantly to make the keypad library work
   keypad.getKey();
 
@@ -617,9 +632,9 @@ void loop() {
       if ((millis() - led_state_time) > led_delays[app_status][led_state]) {
         led_state = 1 - led_state; // Toggle between 0 and 1
         if (DEBUG) {
-          Serial.print(F(">>> led_state: "));
+          Serial.print(">>> led_state: ");
           Serial.println(led_state);
-          Serial.print(F("app_status: "));
+          Serial.print("app_status: ");
           Serial.println(appstatusToString(app_status));
           Serial.println("");
         }
@@ -631,5 +646,3 @@ void loop() {
 
   delay(1);yield();
 }
-
-
