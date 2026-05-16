@@ -1,7 +1,7 @@
 
 # RCntrl Firmware v2 by Omadon
 
-**Version:** 2.31
+**Version:** 2.40
 
 Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller.
 
@@ -33,12 +33,11 @@ Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roa
   - First half → short press mappings  
   - Second half → long press mappings  
   - Long press uses dedicated mapping if defined; otherwise short-press behavior repeats.
-- Profile change sequence: press **1-2-3-4** then the button number of desired profile.  
+- Profile change sequence: press **1-2-3-4** then the button number of desired profile.
+- Press sequence **4-3-2-1-4-3-2-1** to execute BLE factory reset. It plays a visual SOS LED signal for user confirmation.
 - Selected profile is saved in **NVS**, surviving controller reboot.  
 - Profiles can send **normal keys** (letters, numbers, arrows, etc.) or **media keys** (volume/playback).  
   Lookup order: **normal → media**.  
-- **BTLE advertisement** changes based on selected profile (e.g., "RCntrl V2 P.1").  
-  > iOS users: be aware of BTLE advertisement limitations.
 - **LED support** (external or internal):
   - Blinking when not connected to Bluetooth  
   - Optional keepalive blinking (default 10h)  

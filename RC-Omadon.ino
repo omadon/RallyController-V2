@@ -2,7 +2,7 @@
 /*
     RCntrl firmware v2 by Omadon
     
-    Version 2.31
+    Version 2.40
 
     Custom firmware for the StylesRallyIndustries Bluetooth Navigation / Digital Roadbook Controller 
     
@@ -50,6 +50,7 @@
         * On long press, firmware checks for a dedicated long-press mapping and uses it if defined,
           otherwise the short-press behavior repeats.
     - To change profiles, press sequence 1-2-3-4 and then the button number of the desired profile.
+    - Press sequence 4-3-2-1-4-3-2-1 to execute BLE factory reset. It plays a visual SOS LED signal for user confirmation.
     - Profile change sequence can be modified as needed.
     - Selected profile is saved in the NVS, surviving controller reboot.
     - Profiles can send either normal keys (letters, numbers, arrows, etc.) or media keys 
@@ -73,12 +74,12 @@
 */
 
 // Debug flag, set to 0 in production. Adjust baud rate if required
-const int DEBUG = 1;
-const int BaudRate = 460800;
+int DEBUG = 1;
+const int BaudRate = 115200;
 
 // Firmware version
 const int firmware_version_major = 2;
-const int firmware_version_minor = 31;
+const int firmware_version_minor = 40;
 
 #include <HijelHID_BLEKeyboard.h>
 #include <BLEHIDKeys.h>
@@ -86,6 +87,31 @@ const int firmware_version_minor = 31;
 #include "keymappings.h"
 #include <Keypad.h> // Keypad library to handle matrix keypad setup
 #include <Preferences.h> // Used to save last used profile
+
+// ======================================================
+// Board selection (select ONE)
+// ======================================================
+
+    #define BOARD_ESP32_WROOM_32S
+//  #define BOARD_ESP32_C3_12F
+//  #define BOARD_LOLIN_C3_MINI
+//  #define BOARD_LOLIN_S3_MINI
+
+
+#define DBG(x)   do { if (DEBUG_ENABLED) Serial.print(x); } while(0)
+#define DBGLN(x) do { if (DEBUG_ENABLED) Serial.println(x); } while(0)
+#define DBGF(x)   do { if (DEBUG_ENABLED) Serial.print(F(x)); } while(0)
+#define DBGFLN(x) do { if (DEBUG_ENABLED) Serial.println(F(x)); } while(0)
+#define DBGFMT(...) dbg_printf(__VA_ARGS__)
+  inline void dbg_printf(const char* fmt, ...) {
+    char buf[128];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    Serial.println(buf);
+  }
+
 
 Preferences preferences;
 
@@ -104,12 +130,40 @@ char keys[ROWS][COLS] = {
 // Connection diagram is very simple, follow the comments below or matrix above
 // 1L, (button 1, left pin), 1R, (button 1, right pin)
 // Make jumper connection from button to button, don't aggregate to the ESP32 pin
-byte colPins[COLS] = {25, 26, 27}; // 25->(1L,4L,7L), 26->(2L,5L,8L), 27->(3L,6L,9L)
-byte rowPins[ROWS] = {18, 19, 21}; // 18->(1R,2R,3R), 19->(4R,5R,6R), 21->(7R,8R,9R)
+//byte colPins[COLS] = {25, 26, 27}; // 25->(1L,4L,7L), 26->(2L,5L,8L), 27->(3L,6L,9L)
+//byte rowPins[ROWS] = {18, 19, 21}; // 18->(1R,2R,3R), 19->(4R,5R,6R), 21->(7R,8R,9R)
 
-//#define LED_PIN 5    //   status led, PIN2 for internal LED
-#define LED_PIN 13
-int active_profile = 0; // Currently active profile
+// ======================================================
+// Board config
+// ======================================================
+
+#if defined(BOARD_ESP32_WROOM_32S)
+  constexpr bool DEBUG_ENABLED = true;
+  constexpr int LED_PIN = 13;
+  constexpr const char* BOARD_NAME = "ESP32-WROOM-32S";
+  byte colPins[COLS] = {25, 26, 27};
+  byte rowPins[ROWS] = {18, 19, 21};
+#elif defined(BOARD_ESP32_C3_12F)
+  constexpr bool DEBUG_ENABLED = false;
+  constexpr int LED_PIN = 5;
+  constexpr const char* BOARD_NAME = "ESP32-C3-12F";
+  byte colPins[COLS] = {3, 4, 5};
+  byte rowPins[ROWS] = {8, 9, 10};
+#elif defined(BOARD_LOLIN_C3_MINI)
+  constexpr bool DEBUG_ENABLED = false;
+  constexpr int LED_PIN = 7;
+  constexpr const char* BOARD_NAME = "LOLIN-C3-MINI";
+  byte colPins[COLS] = {1, 2, 3};
+  byte rowPins[ROWS] = {6, 8, 10};
+#elif defined(BOARD_LOLIN_S3_MINI)
+  constexpr bool DEBUG_ENABLED = true;
+  constexpr int LED_PIN = 7;
+  constexpr const char* BOARD_NAME = "LOLIN-S3-MINI";
+  byte colPins[COLS] = {11, 12, 13};
+  byte rowPins[ROWS] = {16, 18, 35};
+#else
+  #error "No board selected"
+#endif
 
 // Sequence for changing profile
 #define PROFILE_SEQ_LENGTH 4
@@ -117,22 +171,39 @@ char profile_change_seq[PROFILE_SEQ_LENGTH] = { '1', '2', '3', '4' }; // Press 1
 char profile_key_buffer[PROFILE_SEQ_LENGTH]; 
 int profile_buf_index = 0;
 
+// Sequence for deleting all bonds
+#define BOND_CLEAR_SEQ_LENGTH 8
+char bond_clear_seq[BOND_CLEAR_SEQ_LENGTH] = { '4','3','2','1','4','3','2','1' };
+char bond_key_buffer[BOND_CLEAR_SEQ_LENGTH];
+int bond_buf_index = 0;
+
+// OTA Sequence
+#define OTA_SEQ_LENGTH 8
+char ota_start_seq[OTA_SEQ_LENGTH] = { '4','4','3','3','2','2','1','1' };
+char ota_key_buffer[OTA_SEQ_LENGTH];
+int ota_buf_index = 0;
+
+int active_profile = 0; // Currently active profile
 bool profile_select_mode = false;
 
-// Device name should match the current active profile "BarButtons"
-#define BT_DEVICE_PROFILE 3
-//BleKeyboard bleKeyboard(bt_device_profiles[BT_DEVICE_PROFILE].name, bt_device_profiles[BT_DEVICE_PROFILE].manufacturer, bt_device_profiles[BT_DEVICE_PROFILE].batteryLevel);
-HijelHID_BLEKeyboard bleKeyboard(bt_device_profiles[BT_DEVICE_PROFILE].name, bt_device_profiles[BT_DEVICE_PROFILE].manufacturer, bt_device_profiles[BT_DEVICE_PROFILE].batteryLevel);
+// Device name should match the current active profile, not working currently
+//#define BT_DEVICE_PROFILE 0
+//HijelHID_BLEKeyboard bleKeyboard(bt_device_profiles[BT_DEVICE_PROFILE].name, bt_device_profiles[BT_DEVICE_PROFILE].manufacturer, bt_device_profiles[BT_DEVICE_PROFILE].batteryLevel);
+String deviceName = "RCntrl_V2 " + String(firmware_version_major) + "." + String(firmware_version_minor);
+HijelHID_BLEKeyboard bleKeyboard(deviceName.c_str(), "S.R.I. Omadon", 88 );
+
 // For OTA updates, requires implementation, we will do this later
 
-//#include <WiFi.h>
-//#include <Update.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClient.h>
+#include <Update.h>
 const char* SSID = "RCntrl";
 const char* PSWD = "12345678";
-String host = "213.147.117.10";
+String ota_host = "213.147.117.10";
+String ota_port = ":8080";
 int port = 80;
-String ota_bin_stable =  "/rcntrl-files/rcntrl-stable.bin";  // bin file name with a slash in front.
-String ota_bin_preview = "/rcntrl-files/rcntrl-preview.bin"; // bin file name with a slash in front.
+String ota_bin = String("/") + BOARD_NAME + "-" + String(active_profile+1) + ".bin";
 
 // Initialize keypad library
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
@@ -151,6 +222,7 @@ const int long_press_repeat_interval = 100;
 #define CONFIG_MENU 1     // 1: BT connected (config menu)
 #define MAIN_MENU 2       // 2: BT connected (main menu led off)
 #define KEYMAP_STATUS 3   // 3: BT connected (config menu led keymap flash to indicate selected profile)
+#define OTA 4             // 4: BT disconnected, OTA in progress
 
 int app_status = BT_DISCONNECTED;
 
@@ -166,62 +238,21 @@ enum LedMode {
   LED_OFF,
   LED_STATUS,
   LED_FLASH,
-  LED_PROFILE
+  LED_PROFILE,
+  LED_OTA
 };
 LedMode ledMode = LED_STATUS;
 
 struct LedController {
   bool state = LOW;
   unsigned long lastChange = 0;
-
   int repeat = 0;
   int completed = 0;
-
   int onTime = 100;
   int offTime = 100;
 };
 
 LedController led;
-
-// Routine to send the keystrokes on a short press of the keypad
-void send_short_press(KeypadEvent key, int key_action = INSTANT, int profile_offset = 0) {
-
-  if (DEBUG) {Serial.print(F(" Sending short press key "));Serial.println(key);}
-
-  // We're in the main menu
-  if (app_status == MAIN_MENU || app_status == KEYMAP_STATUS || app_status == BT_DISCONNECTED) {
-    switch (key) {
-      case '1': send_single_key(active_profile + profile_offset, 0, key_action); break;
-      case '2': send_single_key(active_profile + profile_offset, 1, key_action); break;
-      case '3': send_single_key(active_profile + profile_offset, 2, key_action); break;
-      case '4': send_single_key(active_profile + profile_offset, 3, key_action); break;
-      case '5': send_single_key(active_profile + profile_offset, 4, key_action); break;
-      case '6': send_single_key(active_profile + profile_offset, 5, key_action); break;
-      case '7': send_single_key(active_profile + profile_offset, 6, key_action); break;
-      case '8': send_single_key(active_profile + profile_offset, 7, key_action); break;
-    }
-  }      
-}
-
-// Routine to send the keystrokes on a long press of the keypad
-void send_long_press(KeypadEvent key) {
-
-  if (DEBUG) {Serial.print(F(" Sending long press key for button "));Serial.println(key);}
-
-  // We're in the main menu, or offline
-  if (app_status == MAIN_MENU || app_status == KEYMAP_STATUS || app_status == BT_DISCONNECTED) {
-    switch (key) {
-      case '1': send_repeating_key(active_profile, 0); break;
-      case '2': send_repeating_key(active_profile, 1); break;
-      case '3': send_repeating_key(active_profile, 2); break;
-      case '4': send_repeating_key(active_profile, 3); break;
-      case '5': send_repeating_key(active_profile, 4); break;
-      case '6': send_repeating_key(active_profile, 5); break;
-      case '7': send_repeating_key(active_profile, 6); break;
-      case '8': send_repeating_key(active_profile, 7); break;
-    }
-  }
-}
 
 // Set LED state and mark the time of the change
 void setLed(bool state) {
@@ -259,14 +290,12 @@ void updateLed() {
 
     case LED_FLASH:
     case LED_PROFILE:
-
       if (led.state && now - led.lastChange >= led.onTime) {
         setLed(LOW);
       }
       else if (!led.state && now - led.lastChange >= led.offTime) {
         led.completed++;
-        if (DEBUG) {Serial.print(F(" *** LED FLASH Completed: "));Serial.print(led.completed);Serial.print(F("/"));Serial.println(led.repeat);}
-
+		    DBGFMT(" *** LED FLASH Completed: %d/%d", led.completed, led.repeat);
         if (led.completed >= led.repeat) {
           ledMode = LED_STATUS;
           return;
@@ -286,74 +315,172 @@ void updateLed() {
       break;
   }
 }
-
-// Routine that waits while a key is held, returns true if the key is held
-// for the entire time, otherwise false. Time is in milliseconds
-bool wait_for_key_hold(int key_hold_time) {
+void ledSOS()
+{
+  auto dot = []() {
+    setLed(HIGH);
+    delay(120);
+    setLed(LOW);
+    delay(120);
+  };
+  auto dash = []() {
+    setLed(HIGH);
+    delay(360);
+    setLed(LOW);
+    delay(120);
+  };
   
-  int wait_for_key_hold_start_time = millis();
-
-  // Loop as long as both a button is held, and the time has not passed
-  while (keypad.getState() == HOLD && millis() < (wait_for_key_hold_start_time + key_hold_time)) {
-    delay(10); // Just wait a little
-    keypad.getKey(); // update keypad event handler
-  }
-  
-  // We are exiting the wait loop, is the button stil held?
-  if (keypad.getState() == HOLD) {
-      return true;
-  } else {
-      return false;
-  }
-
+  setLed(LOW);
+  delay(1000);
+  // S ...
+  dot(); dot(); dot();
+  delay(300);
+  // O ---
+  dash(); dash(); dash();
+  delay(300);
+  // S ...
+  dot(); dot(); dot();
+  setLed(LOW);
 }
+void ledOTA()
+{
+  auto dot = []() {
+    setLed(HIGH);
+    delay(120);
+    setLed(LOW);
+    delay(120);
+  };
+  auto dash = []() {
+    setLed(HIGH);
+    delay(360);
+    setLed(LOW);
+    delay(120);
+  };
+  setLed(LOW);
+  delay(1000);
+  // O ---
+  dash(); dash(); dash();
+  delay(300);
+  // T -
+  dash();
+  delay(300);
+  // A .-
+  dot(); dash();
+  setLed(LOW);
+}
+void ledOTASuccess() {
+  const int steps = 20;
+
+  float startDelay = 1000.0;  // 1s
+  float minDelay   = 60.0;    
+
+  for (int i = 0; i < steps; i++) {
+
+    // LED ON
+    digitalWrite(LED_PIN, HIGH);
+    delay((int)startDelay);
+
+    // LED OFF
+    digitalWrite(LED_PIN, LOW);
+    delay((int)startDelay);
+
+    float progress = (float)i / (steps - 1);
+    startDelay = minDelay + (1000.0 - minDelay) * pow(1.0 - progress, 2.2);
+  }
+
+  // final state = SUCCESS
+  digitalWrite(LED_PIN, HIGH);
+}
+// Routine to send the keystrokes on a short press of the keypad
+void send_short_press(KeypadEvent key, int key_action = INSTANT, int profile_offset = 0) {
+  DBGF(" Sending short press key for a button ");
+  DBGLN(key);
+    switch (key) {
+      case '1': send_single_key(active_profile + profile_offset, 0, key_action); break;
+      case '2': send_single_key(active_profile + profile_offset, 1, key_action); break;
+      case '3': send_single_key(active_profile + profile_offset, 2, key_action); break;
+      case '4': send_single_key(active_profile + profile_offset, 3, key_action); break;
+      case '5': send_single_key(active_profile + profile_offset, 4, key_action); break;
+      case '6': send_single_key(active_profile + profile_offset, 5, key_action); break;
+      case '7': send_single_key(active_profile + profile_offset, 6, key_action); break;
+      case '8': send_single_key(active_profile + profile_offset, 7, key_action); break;
+    }      
+}
+
+// Routine to send the keystrokes on a long press of the keypad
+void send_long_press(KeypadEvent key) {
+  DBGF(" Sending long press key for a button ");
+  DBGLN(key);
+    switch (key) {
+      case '1': send_repeating_key(active_profile, 0); break;
+      case '2': send_repeating_key(active_profile, 1); break;
+      case '3': send_repeating_key(active_profile, 2); break;
+      case '4': send_repeating_key(active_profile, 3); break;
+      case '5': send_repeating_key(active_profile, 4); break;
+      case '6': send_repeating_key(active_profile, 5); break;
+      case '7': send_repeating_key(active_profile, 6); break;
+      case '8': send_repeating_key(active_profile, 7); break;
+    }
+}
+
 // Send single key, first look in the normal profile table than in the media profile table
 void send_single_key(int profile, int keyIndex, int key_action) {
   // Check if we are sending normal or media keys
   if (profiles_normal[profile][keyIndex] != 0) {
     uint8_t key = profiles_normal[profile][keyIndex];
     if (key_action == INSTANT) {
-      bleKeyboard.write(key);
-      if (DEBUG) { Serial.print(F(" Sending normal INSTANT key: "));  Serial.println(normalKeyToString(profiles_normal[profile][keyIndex])); }
+      bleKeyboard.tap(key);
+	    DBGF(" Sending normal INSTANT key: ");
+	    DBGLN(normalKeyToString(key));
     } else if (key_action == DIRECT) {
       bleKeyboard.press(key);
-      if (DEBUG) { Serial.print(F(" Sending normal DIRECT key: "));  Serial.println(normalKeyToString(key)); }
+	    DBGF(" Sending normal DIRECT key: ");
+	    DBGLN(normalKeyToString(key));
+    } else {
+	    DBGF(" Skipping normal RELEASE key: ");
+	    DBGLN(normalKeyToString(key));
     } 
   } 
   else if (profiles_media[profile][keyIndex] != 0) {
-    /*
+    uint16_t key = profiles_media[profile][keyIndex];
     if (key_action == INSTANT) {
-      bleKeyboard.write(profiles_media[profile][keyIndex]);
-      if (DEBUG) { Serial.print(F("Sending media INSTANT key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
+      bleKeyboard.tap(key);
+      DBGF(" Sending media INSTANT key: ");
+      DBGLN(mediaKeyToString(key));
     } else if (key_action == DIRECT) {
-      bleKeyboard.press(profiles_media[profile][keyIndex]);
-      if (DEBUG) { Serial.print(F("Sending media DIRECT key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
-    }
-    */
+      bleKeyboard.press(key);
+      DBGF(" Sending media DIRECT key: ");
+      DBGLN(mediaKeyToString(key));
+    } else {
+      DBGF(" Skipiing media RELEASE key: ");
+      DBGLN(mediaKeyToString(key));
+    } 
   }
   ledFlash(1, 150, 0); 
 }
 // Routine that sends a key repeatedly (for single char)
 void send_repeating_key(int profile, int keyIndex) {
-  //digitalWrite(LED_PIN, HIGH);
-  bool ledState = false;
   while (keypad.getState() == HOLD) {
+    setLed(!led.state);
     // Check if we are sending normal or media keys
     if (profiles_normal[profile][keyIndex] != 0) {
-      bleKeyboard.write(profiles_normal[profile][keyIndex]);
-      if (DEBUG) { Serial.print(F("  Sending normal key: "));  Serial.println(profiles_normal[profile][keyIndex]); }
-
+      uint8_t key = profiles_normal[profile][keyIndex];
+      bleKeyboard.tap(key);
+      DBGF(" Sending normal key: ");
+	    DBGLN(normalKeyToString(key));
     } 
     else if (profiles_media[profile][keyIndex] != 0) {
-      //ßbleKeyboard.write(profiles_media[profile][keyIndex]);
-      //if (DEBUG) { Serial.print(F("Sending media key: "));  Serial.println(mediaKeyToString(profiles_media[profile][keyIndex])); }
-
+      uint16_t key = profiles_media[profile][keyIndex];
+      bleKeyboard.tap(key);
+      DBGF(" Sending media key: ");
+	    DBGLN(mediaKeyToString(key));
     }
     delay(long_press_repeat_interval); // pause between presses
     keypad.getKey(); // update keypad event handler
     yield();
   }
-  //digitalWrite(LED_PIN, LOW);
+  // Return LED ti automatic blink pattern based on app_status
+  ledStatusMode();
 }
 // Check if longpress mapping exists in the table
 bool has_long_press_mapping(KeypadEvent key) {
@@ -363,16 +490,14 @@ bool has_long_press_mapping(KeypadEvent key) {
     int long_row = active_profile + NUM_PROFILES; // long part of the table
 
     // Provjeri media tablicu
-    /*
-    const uint8_t* media_key = profiles_media[long_row][idx];
-    if (media_key != nullptr && media_key != 0) {
+    uint16_t media_key = profiles_media[long_row][idx];
+    if (media_key != 0) {
         // Ako media key postoji, provjeri normal tablicu
         char normal_key = profiles_normal[long_row][idx];
         if (normal_key == 0) {
             return true; // postoji long press mapping
         }
     }
-    */
     return false; // nema mappinga
 }
 
@@ -384,7 +509,7 @@ int get_key_mode(int key_index) {
 // Helper function to determine if a key is release"
 int is_key_release(char key_pressed) {
   if (get_key_mode(key_pressed - '1') == 0) {
-    if (DEBUG) { Serial.println(" Button type: RELEASE"); }
+    DBGFLN(" Button type: RELEASE");
     return true;
   }
   return false;
@@ -393,7 +518,7 @@ int is_key_release(char key_pressed) {
 // Helper function to determine if a key is supposed to be instant, or we should send a key on "key up"
 int is_key_instant(char key_pressed) {
   if (get_key_mode(key_pressed - '1') == 1) {
-    if (DEBUG) { Serial.println(" Button type: INSTANT"); }
+    DBGFLN(" Button type: INSTANT");
     return true;
   }
   return false;
@@ -402,7 +527,7 @@ int is_key_instant(char key_pressed) {
 // Helper function to determine if a key is direct"
 int is_key_direct(char key_pressed) {
   if (get_key_mode(key_pressed - '1') == 2) {
-    if (DEBUG) { Serial.println(" Button type: DIRECT"); }
+    DBGFLN(" Button type: DIRECT");
     return true;
   }
   return false;
@@ -417,18 +542,24 @@ bool profile_check_sequence() {
   }
   return true;
 }
-
-// function that changes the profile to specific number
-void set_profile(int idx) {
-  if (idx >= 0 && idx < NUM_PROFILES) {
-    active_profile = idx;
-    // Change BLE advertisment name to mach profile number
-    //updateBleName(bt_device_profiles[active_profile].name);
-    // Save current profile to survive rebooting
-    preferences.putInt("profile", active_profile);
-    if (DEBUG) { Serial.print(" >>> Profile set to: "); Serial.println(active_profile + 1);}
+// Function that checks the sequebnce required to delete all bonds
+bool bond_check_sequence()
+{
+  for (int i = 0; i < BOND_CLEAR_SEQ_LENGTH; i++) {
+    if (bond_key_buffer[(bond_buf_index + i) % BOND_CLEAR_SEQ_LENGTH] != bond_clear_seq[i]) {
+      return false;
+    }
   }
-  else if (DEBUG) { Serial.print(" >>> Profile out of range: "); Serial.println(active_profile + 1);}
+  return true;
+}
+// Function that checks the sequebnce for OTA
+bool ota_check_sequence() {
+  for (int i = 0; i < OTA_SEQ_LENGTH; i++) {
+    if (ota_key_buffer[(ota_buf_index + i) % OTA_SEQ_LENGTH] != ota_start_seq[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Select a profile by pressing a button from 1-8
@@ -448,23 +579,40 @@ int resolve_profile_from_key(char key, bool longPress) {
   return profile;
 }
 
+// function that changes the profile to specific number
+void set_profile(int idx) {
+  if (idx >= 0 && idx < NUM_PROFILES) {
+    active_profile = idx;
+    // Change BLE advertisment name to mach profile number
+    // updateBleName(bt_device_profiles[active_profile].name);
+    // Save current profile to survive rebooting
+    preferences.putInt("profile", active_profile);
+    DBGF(" >>> Profile set to: ");
+    DBGLN(active_profile + 1);
+  }
+  else {
+    DBGF(" >>> Profile out of range: ");
+    DBGLN(active_profile + 1);
+  }
+}
+
 void change_profile (char key, bool longPress) {
   int profile = resolve_profile_from_key(key, longPress);
   if (profile >= 0) {
     set_profile(profile);
+    ota_bin = String("/") + BOARD_NAME + "-" + String(active_profile+1) + ".bin";
     profile_select_mode = false;
     if (DEBUG) {
       if (longPress) {
-        Serial.print(F(" >>> Long press profile selected: ")); 
+        DBGF(" >>> Long press profile selected: ");
       } else {
-        Serial.print(F(" >>> Short press profile selected: "));
+        DBGF(" >>> Short press profile selected: ");
       }
-      Serial.println(profile + 1);
+      DBGLN(profile + 1);
       app_status = MAIN_MENU;
     }
   }
 } 
-
 
 // Function for display media buttons in debug
 const char* mediaKeyToString(uint16_t key)
@@ -513,17 +661,185 @@ const char* KeyStateToString(int key) {
   return "UNKNOWN";
 }
 
+void updateBleName(String name)
+{
+  NimBLEDevice::deinit(true);
+  delay(200);
+  NimBLEDevice::init(name.c_str());
+  bleKeyboard.begin();
+}
+
+void clear_ble_bonds()
+{
+  DBGFLN(" >>> Clearing BLE bonds...");
+  bleKeyboard.releaseAll();
+  NimBLEDevice::deleteAllBonds();
+  DBGFLN(" >>> BLE bonds cleared");
+}
+
+bool connectWiFi()
+{
+  DBGFLN(" >>> Starting WiFi...");
+  DBGF(" >>> SSID: ");
+  DBGLN(SSID);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(SSID, PSWD);
+
+  unsigned long start = millis();
+  const unsigned long timeout = 30000; // 30 sec
+
+  while (WiFi.status() != WL_CONNECTED) {
+    DBGF(".");
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+    delay(500);
+
+    if (millis() - start > timeout) {
+      DBGFLN("\n >>> WiFi connection TIMEOUT");
+      setLed(LOW);
+      return false;
+    }
+  }
+  setLed(HIGH);
+  DBGFLN("\n >>> WiFi CONNECTED");
+  DBGF("  >>> IP: ");
+  DBGLN(WiFi.localIP());
+  DBGF("  >>> SUBNET: ");
+  DBGLN(WiFi.subnetMask());
+  DBGF("  >>> GATEWAY: ");
+  DBGLN(WiFi.gatewayIP());
+  DBGF("  >>> DNS1: ");
+  DBGLN(WiFi.dnsIP());
+  DBGF("  >>> RSSI: ");
+  DBG(WiFi.RSSI());
+  DBGFLN(" dBm");
+
+  return true;
+}
+
+void startOTA()
+{
+  WiFiClient client;
+  HTTPClient http;
+
+  DBGFLN(" >>> OTA start: ");
+
+  if (!connectWiFi()) {
+    DBGFLN(" >>> OTA aborted");
+    ledSOS();
+    return;
+  }
+
+  IPAddress fallbackIP = getLastUsableIP(
+    WiFi.localIP(),
+    WiFi.subnetMask()
+  );
+
+
+  String url = "http://" + ota_host + ota_port + ota_bin;
+  //String bkp_url = "http://" + fallbackIP.toString() + ota_port + ota_bin;
+  String bkp_url = "http://" + WiFi.gatewayIP().toString() + ota_port + ota_bin;
+  DBGF(" >>> Primary HTTP Server: ");
+  DBGLN(url);
+  DBGF(" >>> Fallback HTTP Server: ");
+  DBGLN(bkp_url);
+
+  http.begin(client, url);
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    DBGF(" >>> OTA Primary HTTP failed: ");
+    DBG(url);
+    DBGF(": ");
+    DBGLN(code);
+    ledSOS();
+    // Try backup host on the local network
+    http.begin(client, bkp_url);
+    int code = http.GET();
+    if (code != HTTP_CODE_OK) {
+      DBGF(" >>> OTA Backup HTTP failed: ");
+      DBG(bkp_url);
+      DBGF(": ");
+      DBGLN(code);
+      ledSOS();
+      return;
+    }
+  }
+
+  int len = http.getSize();
+  if (len <= 0) {
+    DBGFLN(" >>> OTA invalid size");
+    ledSOS();
+    return;
+  }
+  
+  DBGF(" >>> OTA file size: ");
+  DBG(len / 1024.0);
+  DBGFLN(" kB");
+
+  if (!Update.begin(len)) {
+    DBGFLN(" >>> OTA Update.begin failed");
+    ledSOS();
+    return;
+  }
+
+  WiFiClient *stream = http.getStreamPtr();
+
+  size_t written = Update.writeStream(*stream);
+
+  if (written != len) {
+    DBGFLN(" >>> OTA write mismatch");
+    ledSOS();
+    return;
+  }
+
+  if (!Update.end()) {
+    DBGFLN(" >>> OTA end failed");
+    ledSOS();
+    return;
+  }
+
+  if (Update.isFinished()) {
+    DBGFLN(" >>> OTA success, rebooting...");
+    ledOTASuccess();
+    ESP.restart();
+  } else {
+    DBGFLN(" >>> OTA not finished");
+    ledSOS();
+  }
+}
+
+void enter_ota_mode()
+{
+  bleKeyboard.releaseAll();
+  bleKeyboard.end();
+
+  ledOTA();
+  ledOTA();
+  startOTA();
+}
+
+IPAddress getLastUsableIP(IPAddress ip, IPAddress mask) {
+  IPAddress result;
+
+  for (int i = 0; i < 4; i++) {
+    result[i] = (ip[i] & mask[i]) | (~mask[i]);
+  }
+
+  result[3] -= 1; // broadcast - 1
+  return result;
+}
+
 // This function handles events from the keypad.h library. Each event is only called once
 void keypad_handler(KeypadEvent key) {
 
-  if (DEBUG) { Serial.println(F("\nEntering keypad handler")); }
-
+  DBGFLN("\nEntering keypad handler");
   // State changes for the buttons
   switch (keypad.getState()) {
 
     case PRESSED: // At the 'key down' event of a button
-      if (DEBUG) { Serial.println(F(" keypad.getState = PRESSED"));}
-      if (DEBUG) { Serial.print(F(" Aoo FSM: ")); Serial.println(AppStatusToString(app_status)); }
+      DBGFLN(" keypad.getState = PRESSED");
+      DBGF(" FSM: ");
+      DBGLN(AppStatusToString(app_status));
       if (is_key_instant(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, INSTANT);}
       else if (is_key_direct(key) && app_status != CONFIG_MENU && app_status != KEYMAP_STATUS) { send_short_press(key, DIRECT);}
       last_keypad_state = PRESSED;
@@ -531,8 +847,9 @@ void keypad_handler(KeypadEvent key) {
 
     case HOLD: // When a button is held beyond the long_press_time value
       last_keypad_state = HOLD;  
-      if (DEBUG) { Serial.println(F(" keypad.getState = HOLD")); }
-      
+      DBGFLN(" keypad.getState = HOLD"); 
+      DBGF(" FSM: ");
+      DBGLN(AppStatusToString(app_status));           
       // Check if we are in the profile selected mode
       if (profile_select_mode) {
         change_profile(key, true);
@@ -552,17 +869,38 @@ void keypad_handler(KeypadEvent key) {
       break;    
 
     case RELEASED: // When a button is released
-      if (DEBUG) {
-        Serial.println(F(" keypad.getState = RELEASED"));
-        Serial.print(F(" Previous keypad.getState = "));
-        Serial.println(KeyStateToString(last_keypad_state));
-        Serial.print(F(" App FSM: "));
-        Serial.println(AppStatusToString(app_status));
+      DBGFLN(" keypad.getState = RELEASED");
+      DBGF(" Previous keypad.getState = ");
+      DBGLN(KeyStateToString(last_keypad_state));
+      DBGF(" FSM: ");
+      DBGLN(AppStatusToString(app_status));
+
+      // Reset BLE Stack if we detect proper key sequence
+      bond_key_buffer[bond_buf_index] = key;
+      bond_buf_index = (bond_buf_index + 1) % BOND_CLEAR_SEQ_LENGTH;
+
+      if (bond_check_sequence()) {
+        DBGFLN(" >>> BLE FACTORY RESET SEQUENCE!");
+        // Signal user using LED
+        ledSOS();
+        clear_ble_bonds();
+        // force disconnect ako je spojen
+        bleKeyboard.end();
+        delay(200);
+        bleKeyboard.begin();
+      }
+      // Start OTE if we detect proper key sequence
+      ota_key_buffer[ota_buf_index] = key;
+      ota_buf_index = (ota_buf_index + 1) % OTA_SEQ_LENGTH;
+
+      if (ota_check_sequence()) {
+        DBGFLN(">>> OTA sequence detected");
+        enter_ota_mode();
+        app_status = OTA;
       }
 
       // Check if we are in the profile selected mode
       if (profile_select_mode) {
-        //app_status = KEYMAP_STATUS;
         change_profile(key, false);
       } 
       else {
@@ -573,9 +911,8 @@ void keypad_handler(KeypadEvent key) {
         // Check if profile change sequence has been entered
         if (profile_check_sequence()) {
           profile_select_mode = true;
-          //delay(500);
           ledProfileBlink(active_profile + 1);
-          if (DEBUG) {Serial.println(F(" >>> Enter profile selection mode: press 1-8 to select profile")); }
+          DBGFLN(" >>> Enter profile selection mode: press 1-8 to select profile");
           app_status = CONFIG_MENU;
         }
       }
@@ -594,12 +931,11 @@ void keypad_handler(KeypadEvent key) {
       break;
     
     case IDLE: // not sure why this generates a callback
-      if (DEBUG) {
-        Serial.println(F(" keypad.getState = IDLE"));
-        Serial.print(F(" App FSM: ")); Serial.println(AppStatusToString(app_status));
-        Serial.print(F(" Profile: ")); 
-        Serial.println(active_profile + 1);
-        }
+      DBGFLN(" keypad.getState = IDLE");
+      DBGF(" FSM: ");
+      DBGLN(AppStatusToString(app_status));
+      DBGF(" Profile: ");
+      DBGLN(active_profile + 1);
 
       // Release all keys (write() should have done this, but keys that are press()-ed should be released)
       bleKeyboard.releaseAll();
@@ -610,38 +946,43 @@ void keypad_handler(KeypadEvent key) {
 
 // Arduino built-in setup loop
 void setup() {
-  
-  Serial.begin(BaudRate);
-  Serial.println("\nRCntrl_V2: BOOT OK");
+  if (DEBUG_ENABLED) Serial.begin(BaudRate);
+
+  DBGFLN("\nRCntrl_V2: BOOT OK");
 
   // Start bluetooth keyboard
   delay(200); 
   bleKeyboard.begin();
-  Serial.println("RCntrl_V2: HijelHID BLEKeyboard OK");
+  DBGFLN("RCntrl_V2: HijelHID BLEKeyboard OK");
   
   // Handle all keypad events through this listener
   keypad.addEventListener(keypad_handler); // Add an event listener for this keypad
 
   // set HoldTime
   keypad.setHoldTime(long_press_time); 
-  Serial.println("RCntrl_V2: Keypad EventListener OK");
+  DBGFLN("RCntrl_V2: Keypad EventListener OK");
+  
+  DBGF("Board: ");
+  DBGLN(BOARD_NAME);
+
   // Enable the led to indicate we're switched on
   pinMode(LED_PIN, OUTPUT);  
-  Serial.print("RCntrl_V2: LED ");
-  Serial.print(LED_PIN);
-  Serial.println(" OK");
+  DBGF("RCntrl_V2: LED ");
+  DBG(LED_PIN);
+  DBGFLN(" OK");
 
-  Serial.println("\nRCntrl_V2: Starting RCntrl V2 keyboard");
+  DBGFLN("\nRCntrl_V2: Starting RCntrl V2 keyboard");
   String fw_version = String(firmware_version_major) + "." + String(firmware_version_minor);
-  Serial.println("RCntrl_V2: Firmware version: " + fw_version);
+  DBGF("RCntrl_V2: Firmware version: ");
+  DBGLN(fw_version);
   
   // load profile from "settings" namespace
-  Serial.println("RCntrl_V2: Loading saved profile from EPROM");
+  DBGFLN("RCntrl_V2: Loading saved profile from EPROM");
   preferences.begin("settings", false);
   active_profile = preferences.getInt("profile", 0);
   set_profile(active_profile);
 
-  Serial.println("Cntrl_V2: Setup DONE");
+  DBGFLN("Cntrl_V2: Setup DONE");
   delay(1000);
   // End of setup()
 }
@@ -658,7 +999,7 @@ void loop() {
   // Blink based on BT connectivity
   //
   if (app_status == BT_DISCONNECTED && bleKeyboard.isConnected())  {
-    Serial.println("\nRCntrl_V2: Keyboard connected...");
+    DBGLN("\nRCntrl_V2: Keyboard connected...");
     app_status = MAIN_MENU;
   }
   if (app_status != BT_DISCONNECTED && app_status != CONFIG_MENU && !bleKeyboard.isConnected()) {

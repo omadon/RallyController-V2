@@ -36,10 +36,10 @@
 //
 // 2. media_profiles:
 //    - Stores media control keys (e.g. volume up/down, play/pause, next/prev track).
-//    - These are defined in the BLE Keyboard library as `const uint8_t*`
+//    - These are defined in the BLE Keyboard library as `const uint16_t`
 //      (HID usage codes for the consumer control report).
 //    - Because media keys are defined differently than normal keys, they require
-//      their own table with a matching pointer type.
+//      their own table.
 //
 // Table layout (for both normal_profiles and media_profiles):
 //    - The first NUM_PROFILES rows are for short press mappings.
@@ -56,7 +56,9 @@
 // This way, each button can either send a normal key or, if unused in the normal table,
 // act as a media key — and both short and long press actions can be mapped independently
 
+// Normal Keys
 char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
+  // -----------------SHORT PRESS-------------------------
   // Profil 1 short press
   { '=', '-', 'r','c', KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN }, // Original RCntrl P.1 + arrow buttons for the second controller
   // Profil 2 short press
@@ -73,6 +75,7 @@ char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
   { KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8 }, //SpeedoX MyRide
   // Profil 8 short press
   { KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN, KEY_F6, KEY_F7, KEY_RETURN, KEY_ESCAPE },  // Inverted DMD2
+  // -----------------LONG PRESS-------------------------
   // Profil 1 long press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 2 long press
@@ -91,15 +94,16 @@ char profiles_normal[NUM_PROFILES*2][NUM_KEYS] = {
   { 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
-const uint16_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
-  // Profil 1 short press
+// Media Keys
+uint16_t profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
+ // -----------------SHORT PRESS-------------------------
+ // Profil 1 short press
   { 0, 0, 0, 0, 0, 0, 0, 0 }, 
   // Profil 2 short press
-  { 0, 0, 0, 0, 0, 0, 0, 0 },
-  //{ MEDIA_PREV_TRACK, MEDIA_NEXT_TRACK, MEDIA_VOLUME_DOWN, MEDIA_VOLUME_UP, 0, 0, 0, 0 }, 
+  { MEDIA_PREV_TRACK, MEDIA_NEXT_TRACK, MEDIA_VOLUME_DOWN, MEDIA_VOLUME_UP, 0, 0, 0, 0 }, 
   // Profil 3 short press
-  { 0, 0, 0, 0, 0, 0, 0, 0 },
-  //{ MEDIA_NEXT_TRACK, MEDIA_PREV_TRACK, MEDIA_VOLUME_UP, MEDIA_VOLUME_DOWN, 0, 0, 0, 0 }, 
+  //{ 0, 0, 0, 0, 0, 0, 0, 0 },
+  { MEDIA_NEXT_TRACK, MEDIA_PREV_TRACK, MEDIA_VOLUME_UP, MEDIA_VOLUME_DOWN, 0, 0, 0, 0 }, 
   // Profil 4 short press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 5 short press
@@ -111,6 +115,7 @@ const uint16_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   // Profil 8 short press
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // If there is a mapping for long press, instead of sending repeating key, single key with new mapping is sent
+  // -----------------LONG PRESS-------------------------  
   // Profil 1 long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 },
     // Profil 2 long press 
@@ -122,8 +127,7 @@ const uint16_t* profiles_media[NUM_PROFILES*2][NUM_KEYS] = {
   //    first two buttons are non-instant, meaning key will be sent when you release the button (no repeat of course)
   //    button 1: * short press - > MEDIA_NEXT_TRACK       button 2: * short press - > MEDIA_PREV_TRACK
   //              * long press  - > MEDIA_PLAY_PAUSE                  * long press  - > MEDIA_STOP
-  { 0, 0, 0, 0, 0, 0, 0, 0 },
-  //{ MEDIA_PLAY_PAUSE, MEDIA_STOP, 0, 0, 0, 0, 0, 0 },
+  { MEDIA_PLAY_PAUSE, MEDIA_STOP, 0, 0, 0, 0, 0, 0 },
   // Profil 4 long press 
   { 0, 0, 0, 0, 0, 0, 0, 0 },
   // Profil 5 long press 
@@ -152,6 +156,7 @@ int key_actions[NUM_PROFILES][NUM_KEYS] = {
 };
 
 // We want to have separate BT device info for each profile just in case some application require specific name like DMD2
+// Currently disabled becase BT on device gets confused
 struct BTDeviceInfo {
   const char* name;
   const char* manufacturer;
@@ -161,11 +166,11 @@ BTDeviceInfo bt_device_profiles[8] = {
   { "RCntrl V2 P.1", "S.R.I. Omadon", 55 }, // Profil 1
   { "RCntrl V2 P.2", "S.R.I. Omadon", 55 }, // Profil 2
   { "RCntrl V2 P.3", "S.R.I. Omadon", 55 }, // Profil 3
-  { "BarButtons",    "BarButtons", 55 }, // Profil 4
+  { "BarButtons",   "BarButtons",    55 }, // Profil 4
   { "RCntrl V2 P.5", "S.R.I. Omadon", 55 }, // Profil 5
   { "RCntrl V2 P.6", "S.R.I. Omadon", 55 }, // Profil 6
   { "RCntrl V2 P.7", "S.R.I. Omadon", 55 }, // Profil 7
-  { "DMD2 CTL 8K",   "S.R.I. Omadon", 55 }  // Profil 8
+  { "DMD2 CTL 8K",  "S.R.I. Omadon", 55 }  // Profil 8
 };
 
 
@@ -224,7 +229,8 @@ AppStatusName AppStatusNames[] = {
   { 0, "BT_DISCONNECTED" },
   { 1, "CONFIG_MENU" },
   { 2, "MAIN_MENU" },
-  { 3, "KEYMAP_STATUS" }
+  { 3, "KEYMAP_STATUS" },
+  { 4, "OTA" }
 };
 
 struct KeyStateName {
