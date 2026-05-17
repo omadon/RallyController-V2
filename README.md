@@ -205,6 +205,190 @@ Explanation:
 | 7 | `F1–F8` | `Prev, Next, Play/Pause` | `F9–F12` | – | All non-instant |
 | 8 | `↑, ←, →, ↓, F6, F7, Enter, F5` | – | – | – | All instant |
 
+## OTA Firmware Update
+
+RCntrl V2 supports dual-stage Over-The-Air firmware updates.
+
+The controller first attempts to download firmware from GitHub Releases.
+
+If GitHub OTA fails, it automatically falls back to a local HTTP server.
+
+---
+
+## Firmware Naming
+
+Firmware binaries use the following naming format:
+
+```text
+<BOARD_NAME>-<PROFILE>.bin
+```
+
+Examples:
+
+```text
+ESP32-C3-12F-1.bin
+ESP32-C3-12F-4.bin
+LOLIN-C3-MINI-2.bin
+```
+
+---
+
+## Profile-Aware OTA
+
+RCntrl V2 supports profile-specific firmware images.
+
+This allows hosting different firmware builds with predefined key mappings, so users can install ready-made layouts without compiling firmware themselves.
+
+Example use cases:
+
+| Profile | Example Purpose |
+|---------|----------------|
+| 1 | Default universal firmware |
+| 2 | Media control |
+| 3 | Rally navigation |
+| 4 | Roadbook tablet control |
+| 5-8 | Custom user layouts |
+
+---
+
+## Default OTA Behaviour
+
+Profile **1** is the mandatory fallback firmware.
+
+This binary should always be available.
+
+Example:
+
+```text
+ESP32-C3-12F-1.bin
+```
+
+After boot, OTA always defaults to profile 1.
+
+This ensures a valid firmware image is always available, even if profile-specific firmware files are not hosted.
+
+---
+
+## Selecting Profile-Specific Firmware
+
+Firmware for profiles **2-8** is optional.
+
+To request a profile-specific firmware image, you must explicitly select that profile before starting OTA.
+
+This applies even if that profile is already active.
+
+### Example
+
+If profile 4 is currently active and you want OTA to download:
+
+```text
+ESP32-C3-12F-4.bin
+```
+
+You must reselect profile 4 before starting OTA.
+
+This intentionally prevents OTA failures caused by missing profile-specific firmware files.
+
+---
+
+## Why This Design?
+
+This OTA design guarantees:
+
+- Profile 1 always works as universal recovery firmware
+- Optional profile firmware can be hosted only when needed
+- Users explicitly choose non-default firmware variants
+- OTA remains reliable even with partial firmware availability
+
+---
+
+## Primary OTA (GitHub Release)
+
+Firmware is downloaded from the latest GitHub release.
+
+Example:
+
+```text
+https://github.com/<repo>/releases/latest/download/ESP32-C3-12F-1.bin
+```
+
+---
+
+## Secondary OTA Fallback (Local HTTP)
+
+If GitHub OTA fails, RCntrl V2 attempts local OTA using the current gateway IP on port **8080**.
+
+Example:
+
+```text
+http://192.168.43.1:8080/ESP32-C3-12F-1.bin
+```
+
+---
+
+## Local OTA Using Android Hotspot
+
+### 1. Enable Android Hotspot
+
+Configure hotspot SSID and password to match firmware settings.
+
+---
+
+### 2. Start a Local HTTP Server
+
+Recommended Android app:
+
+**Simple HTTP Server**
+
+Configure it to serve files on port:
+
+```text
+8080
+```
+
+---
+
+### 3. Copy Firmware Binary
+
+Place the correct firmware file in the HTTP server root directory.
+
+Example:
+
+```text
+ESP32-C3-12F-1.bin
+```
+
+---
+
+### 4. Trigger OTA Update
+
+The controller will:
+
+1. Attempt GitHub OTA
+2. Automatically fall back to local OTA if GitHub fails
+
+---
+
+## Recommended Workflow
+
+### Standard users
+
+Use profile 1 OTA firmware.
+
+---
+
+### Advanced users
+
+Host additional profile-specific firmware builds for custom key mappings.
+
+---
+
+## OTA Safety
+
+If a profile-specific firmware file does not exist, simply reselect profile 1 and retry OTA.
+
+This guarantees recovery using the default firmware image.
+
 ---
 
 ## 🚀 Workflow

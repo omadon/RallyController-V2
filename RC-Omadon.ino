@@ -77,14 +77,16 @@
 int DEBUG = 1;
 const int BaudRate = 115200;
 
-// Firmware version
+// Firmware version - this will be visable in the BTLE advertisment (RCntrl_V2 2.40-1)
 const int firmware_version_major = 2;
 const int firmware_version_minor = 40;
+#define firmware_map_template 1
 
 #include <HijelHID_BLEKeyboard.h>
 #include <BLEHIDKeys.h>
 #include <BLEHIDMediaKeys.h>
-#include "keymappings.h"
+//#include "keymappings.h"
+#include "names.h"
 #include <Keypad.h> // Keypad library to handle matrix keypad setup
 #include <Preferences.h> // Used to save last used profile
 
@@ -97,6 +99,25 @@ const int firmware_version_minor = 40;
 //  #define BOARD_LOLIN_C3_MINI
 //  #define BOARD_LOLIN_S3_MINI
 
+#if firmware_map_template == 1
+  #include "keymappings1.h"
+#elif firmware_map_template == 2
+  #include "keymappings2.h"
+#elif firmware_map_template == 3
+  #include "keymappings3.h"
+#elif firmware_map_template == 4
+  #include "keymappings4.h"
+#elif firmware_map_template == 5
+  #include "keymappings5.h"
+#elif firmware_map_template == 6
+  #include "keymappings6.h"
+#elif firmware_map_template == 7
+  #include "keymappings7.h"
+#elif firmware_map_template == 8
+  #include "keymappings8.h"
+#else
+  #error "Invalid firmware_map_template (must be 1-8)"
+#endif
 
 #define DBG(x)   do { if (DEBUG_ENABLED) Serial.print(x); } while(0)
 #define DBGLN(x) do { if (DEBUG_ENABLED) Serial.println(x); } while(0)
@@ -188,19 +209,23 @@ bool profile_select_mode = false;
 
 // Device name should match the current active profile, not working currently
 //#define BT_DEVICE_PROFILE 0
-//HijelHID_BLEKeyboard bleKeyboard(bt_device_profiles[BT_DEVICE_PROFILE].name, bt_device_profiles[BT_DEVICE_PROFILE].manufacturer, bt_device_profiles[BT_DEVICE_PROFILE].batteryLevel);
-String deviceName = "RCntrl_V2 " + String(firmware_version_major) + "." + String(firmware_version_minor);
+String deviceName =
+  String("RCntrl_V2 ") +
+  String(firmware_version_major) + "." +
+  String(firmware_version_minor) + "-" +
+  String(firmware_map_template);
 HijelHID_BLEKeyboard bleKeyboard(deviceName.c_str(), "S.R.I. Omadon", 88 );
 
 // For OTA updates, requires implementation, we will do this later
 
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <WiFiClient.h>
 #include <Update.h>
 const char* SSID = "RCntrl";
 const char* PSWD = "12345678";
-String ota_host = "213.147.117.10";
+String ota_host = "https://github.com/omadon/RallyController-V2/releases/latest/download/";
 String ota_port = ":8080";
 int port = 80;
 String ota_bin = String("/") + BOARD_NAME + "-" + String(active_profile+1) + ".bin";
@@ -426,7 +451,7 @@ void send_long_press(KeypadEvent key) {
 // Send single key, first look in the normal profile table than in the media profile table
 void send_single_key(int profile, int keyIndex, int key_action) {
   // Check if we are sending normal or media keys
-  if (profiles_normal[profile][keyIndex] != 0) {
+  if (profiles_normal[profile][keyIndex] > 0) {
     uint8_t key = profiles_normal[profile][keyIndex];
     if (key_action == INSTANT) {
       bleKeyboard.tap(key);
@@ -441,7 +466,7 @@ void send_single_key(int profile, int keyIndex, int key_action) {
 	    DBGLN(normalKeyToString(key));
     } 
   } 
-  else if (profiles_media[profile][keyIndex] != 0) {
+  else if (profiles_media[profile][keyIndex] > 0) {
     uint16_t key = profiles_media[profile][keyIndex];
     if (key_action == INSTANT) {
       bleKeyboard.tap(key);
@@ -463,13 +488,13 @@ void send_repeating_key(int profile, int keyIndex) {
   while (keypad.getState() == HOLD) {
     setLed(!led.state);
     // Check if we are sending normal or media keys
-    if (profiles_normal[profile][keyIndex] != 0) {
+    if (profiles_normal[profile][keyIndex] > 0) {
       uint8_t key = profiles_normal[profile][keyIndex];
       bleKeyboard.tap(key);
       DBGF(" Sending normal key: ");
 	    DBGLN(normalKeyToString(key));
     } 
-    else if (profiles_media[profile][keyIndex] != 0) {
+    else if (profiles_media[profile][keyIndex] > 0) {
       uint16_t key = profiles_media[profile][keyIndex];
       bleKeyboard.tap(key);
       DBGF(" Sending media key: ");
@@ -583,8 +608,6 @@ int resolve_profile_from_key(char key, bool longPress) {
 void set_profile(int idx) {
   if (idx >= 0 && idx < NUM_PROFILES) {
     active_profile = idx;
-    // Change BLE advertisment name to mach profile number
-    // updateBleName(bt_device_profiles[active_profile].name);
     // Save current profile to survive rebooting
     preferences.putInt("profile", active_profile);
     DBGF(" >>> Profile set to: ");
@@ -661,14 +684,6 @@ const char* KeyStateToString(int key) {
   return "UNKNOWN";
 }
 
-void updateBleName(String name)
-{
-  NimBLEDevice::deinit(true);
-  delay(200);
-  NimBLEDevice::init(name.c_str());
-  bleKeyboard.begin();
-}
-
 void clear_ble_bonds()
 {
   DBGFLN(" >>> Clearing BLE bonds...");
@@ -677,6 +692,7 @@ void clear_ble_bonds()
   DBGFLN(" >>> BLE bonds cleared");
 }
 
+ // Function to connect to the Wifi
 bool connectWiFi()
 {
   DBGFLN(" >>> Starting WiFi...");
@@ -716,11 +732,42 @@ bool connectWiFi()
 
   return true;
 }
-
+// OTA firmware upgrade function
+//
+// Primary OTA:
+// Downloads firmware from the latest GitHub release.
+//
+// Firmware naming:
+//
+//   <BOARD_NAME>-<PROFILE>.bin
+//
+// Example:
+//   ESP32-C3-12F-1.bin
+//   ESP32-C3-12F-4.bin
+//
+// Profile 1 firmware is the default OTA fallback and should always exist.
+//
+// Additional profile-specific firmware images (2-8) are optional and may
+// provide predefined key mappings for specific use cases.
+//
+// To request a profile-specific firmware image, the user must explicitly
+// select that profile, even if it is already the active one.
+//
+// This guarantees OTA always falls back to profile 1 unless a different
+// firmware target is intentionally requested.
+//
+// This design allows distributing multiple ready-made controller layouts
+// without requiring users to compile firmware themselves.
+//
+// Secondary OTA fallback:
+// If GitHub OTA fails, the controller attempts local OTA from the current
+// gateway IP on port 8080.
 void startOTA()
 {
-  WiFiClient client;
+  WiFiClient http_client;
   HTTPClient http;
+  WiFiClientSecure https_client;
+  https_client.setInsecure();
 
   DBGFLN(" >>> OTA start: ");
 
@@ -735,16 +782,15 @@ void startOTA()
     WiFi.subnetMask()
   );
 
-
-  String url = "http://" + ota_host + ota_port + ota_bin;
-  //String bkp_url = "http://" + fallbackIP.toString() + ota_port + ota_bin;
+  String url = ota_host + ota_bin;
   String bkp_url = "http://" + WiFi.gatewayIP().toString() + ota_port + ota_bin;
   DBGF(" >>> Primary HTTP Server: ");
   DBGLN(url);
   DBGF(" >>> Fallback HTTP Server: ");
   DBGLN(bkp_url);
 
-  http.begin(client, url);
+  http.begin(https_client, url);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   int code = http.GET();
   if (code != HTTP_CODE_OK) {
     DBGF(" >>> OTA Primary HTTP failed: ");
@@ -753,7 +799,7 @@ void startOTA()
     DBGLN(code);
     ledSOS();
     // Try backup host on the local network
-    http.begin(client, bkp_url);
+    http.begin(http_client, bkp_url);
     int code = http.GET();
     if (code != HTTP_CODE_OK) {
       DBGF(" >>> OTA Backup HTTP failed: ");
